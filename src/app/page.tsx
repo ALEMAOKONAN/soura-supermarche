@@ -27,7 +27,9 @@ export default function PageConnexion() {
       return;
     }
 
-    window.location.href = "/caisse";
+    // Le middleware décide de la destination selon le rôle (caissier → caisse,
+    // gérant/admin → tableau de bord) — pas besoin de le recalculer ici.
+    window.location.href = "/";
   }
 
   return (

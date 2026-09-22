@@ -58,9 +58,16 @@ export async function mettreAJourSession(request: NextRequest) {
   }
 
   if (user && estRoutePublique) {
-    const urlCaisse = request.nextUrl.clone();
-    urlCaisse.pathname = "/caisse";
-    return NextResponse.redirect(urlCaisse);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const claims = session ? decoderClaimsJwt(session.access_token) : {};
+    const urlDestination = request.nextUrl.clone();
+    // Un admin/gérant arrive directement sur son tableau de bord ; un
+    // caissier, sur la caisse — sa seule interface au quotidien.
+    urlDestination.pathname = claims.app_role === "caissier" ? "/caisse" : "/gerant";
+    return NextResponse.redirect(urlDestination);
   }
 
   if (user && ROUTES_RESERVEES_GERANT.some((route) => chemin.startsWith(route))) {
