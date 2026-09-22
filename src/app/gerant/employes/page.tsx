@@ -194,17 +194,12 @@ export default function PageEmployes() {
   }
 
   return (
-    <main className="min-h-screen" style={{ background: "var(--couleur-fond)" }}>
+    <main>
       <header
-        className="flex items-center justify-between px-6 h-16 border-b"
+        className="flex items-center h-16 px-8 border-b"
         style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
       >
-        <p className="police-titre font-semibold" style={{ color: "var(--couleur-marque)" }}>
-          SOURA Marché · Employés
-        </p>
-        <a href="/gerant" className="text-sm" style={{ color: "var(--couleur-marque)" }}>
-          ← Tableau de bord
-        </a>
+        <p className="police-titre font-semibold text-lg">Employés</p>
       </header>
 
       <div className="max-w-3xl mx-auto p-6 flex flex-col gap-10">

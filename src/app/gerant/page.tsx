@@ -107,38 +107,12 @@ export default function PageGerant() {
   const nombreVentesDuJour = ca[0]?.nombre_ventes ?? 0;
 
   return (
-    <main className="min-h-screen" style={{ background: "var(--couleur-fond)" }}>
+    <main>
       <header
-        className="flex items-center justify-between px-6 h-16 border-b"
+        className="flex items-center h-16 px-8 border-b"
         style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
       >
-        <p className="police-titre font-semibold" style={{ color: "var(--couleur-marque)" }}>
-          SOURA Marché · Gestion
-        </p>
-        <div className="flex items-center gap-5 text-sm">
-          <a href="/gerant/produits" style={{ color: "var(--couleur-marque)" }}>
-            Produits
-          </a>
-          <a href="/gerant/fournisseurs" style={{ color: "var(--couleur-marque)" }}>
-            Fournisseurs
-          </a>
-          <a href="/gerant/employes" style={{ color: "var(--couleur-marque)" }}>
-            Employés
-          </a>
-          <a href="/caisse" style={{ color: "var(--couleur-marque)" }}>
-            Aller à la caisse →
-          </a>
-          <button
-            onClick={async () => {
-              const supabase = creerClientSupabase();
-              await supabase.auth.signOut();
-              window.location.href = "/";
-            }}
-            style={{ color: "var(--couleur-marque)" }}
-          >
-            Déconnexion
-          </button>
-        </div>
+        <p className="police-titre font-semibold text-lg">Tableau de bord</p>
       </header>
 
       {erreur && (
