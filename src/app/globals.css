@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/*
+  Remarque environnement : les polices Manrope/Inter sont chargées ici via une
+  pile de secours système (le bac à sable de build n'a pas accès à Google
+  Fonts). Sur Vercel, remplacez ces déclarations par next/font/google pour
+  charger les polices réelles — la mise en page ne change pas.
+*/
+
+:root {
+  --couleur-fond: #F7F5F0;
+  --couleur-texte: #1A1A1A;
+  --couleur-marque: #0F3D2E;
+  --couleur-marque-claire: #17573F;
+  --couleur-accent: #E8622C;
+  --couleur-accent-sombre: #C94F1E;
+  --couleur-bordure: #DCD8CE;
+  --couleur-surface: #FFFFFF;
+  --couleur-danger: #B3261E;
+  --couleur-succes: #1F7A4D;
+
+  --police-titre: "Manrope", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --police-texte: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  background: var(--couleur-fond);
+  color: var(--couleur-texte);
+  font-family: var(--police-texte);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, .police-titre {
+  font-family: var(--police-titre);
+}
+
+/* Focus clavier visible partout — accessibilité non négociable sur un écran de caisse */
+:focus-visible {
+  outline: 2px solid var(--couleur-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
