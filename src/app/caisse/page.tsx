@@ -40,6 +40,7 @@ export default function PageCaisse() {
   const [montantRecu, setMontantRecu] = useState<string>("");
   const [enCours, setEnCours] = useState(false);  const [erreur, setErreur] = useState<string | null>(null);
   const [derniereVenteTotal, setDerniereVenteTotal] = useState<number | null>(null);
+  const [roleUtilisateur, setRoleUtilisateur] = useState<string | null>(null);
 
   // Fidélité — rattachement d'un client optionnel au moment du paiement
   const [telephoneClient, setTelephoneClient] = useState("");
@@ -47,6 +48,22 @@ export default function PageCaisse() {
   const [rechercheClientFaite, setRechercheClientFaite] = useState(false);
   const [nomNouveauClient, setNomNouveauClient] = useState("");
   const [pointsGagnes, setPointsGagnes] = useState<number | null>(null);
+
+  // Récupère le rôle une fois au chargement, pour savoir si le lien
+  // "Gestion" doit apparaître dans l'en-tête (masqué pour les caissiers).
+  useEffect(() => {
+    async function chargerRole() {
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) return;
+      const { data: profil } = await supabase
+        .from("utilisateurs")
+        .select("role")
+        .eq("id", authData.user.id)
+        .single();
+      if (profil) setRoleUtilisateur(profil.role);
+    }
+    chargerRole();
+  }, [supabase]);
 
   // Recherche produit (nom ou code-barre) — se relance à chaque frappe,
   // avec un léger anti-rebond pour ne pas spammer l'API à chaque touche.
@@ -217,6 +234,11 @@ export default function PageCaisse() {
           <p style={{ color: "#6B6858" }}>
             {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
           </p>
+          {roleUtilisateur && roleUtilisateur !== "caissier" && (
+            <a href="/gerant" style={{ color: "var(--couleur-marque)" }}>
+              Gestion →
+            </a>
+          )}
           <button
             onClick={async () => {
               await supabase.auth.signOut();
