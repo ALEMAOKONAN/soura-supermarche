@@ -93,6 +93,15 @@ export default function PageCaisse() {
     chargerRole();
   }, [supabase]);
 
+  // Impression automatique : dès qu'une vente est validée, un nouveau ticket
+  // est créé, et on lance l'impression. Le court délai laisse React afficher
+  // le ticket dans la page avant que le navigateur ne l'imprime.
+  useEffect(() => {
+    if (!dernierTicket) return;
+    const minuteur = setTimeout(() => window.print(), 300);
+    return () => clearTimeout(minuteur);
+  }, [dernierTicket]);
+
   // Recherche produit (nom ou code-barre) — se relance à chaque frappe,
   // avec un léger anti-rebond pour ne pas spammer l'API à chaque touche.
   useEffect(() => {
@@ -568,7 +577,7 @@ export default function PageCaisse() {
                     className="shrink-0 h-9 px-3 rounded-md text-sm font-medium text-white"
                     style={{ background: "var(--couleur-marque)" }}
                   >
-                    Imprimer le reçu
+                    Réimprimer
                   </button>
                 )}
               </div>
