@@ -814,7 +814,6 @@ export default function PageCaisse() {
           {dernierTicket.date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
         </div>
         <div>Ticket n° {dernierTicket.venteId.slice(0, 8).toUpperCase()}</div>
-        {dernierTicket.horsLigne && <div>(Vente enregistrée hors ligne)</div>}
         {infosMagasin?.nomCaissier && <div>Caissier : {infosMagasin.nomCaissier}</div>}
 
         <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
