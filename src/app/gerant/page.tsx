@@ -24,6 +24,8 @@ export default function PageGerant() {
   const [valeurStock, setValeurStock] = useState<LigneValeurStock | null>(null);
   const [rotationLente, setRotationLente] = useState<LigneRotationLente[]>([]);
   const [aReapprovisionner, setAReapprovisionner] = useState<LigneReappro[]>([]);
+  const [stocksNegatifs, setStocksNegatifs] = useState<{ produit_id: string; nom: string; quantite: number }[]>([]);
+  const [ventesHorsLigne, setVentesHorsLigne] = useState(0);
 
   useEffect(() => {
     async function charger() {
@@ -61,6 +63,8 @@ export default function PageGerant() {
         { data: dataValeurStock },
         { data: dataRotationLente },
         { data: dataReappro },
+        { data: dataStocksNegatifs },
+        { count: nbVentesHorsLigne },
       ] = await Promise.all([
         supabase.rpc("rapport_chiffre_affaires", {
           p_magasin_id: magasinId,
@@ -71,6 +75,13 @@ export default function PageGerant() {
         supabase.rpc("rapport_valeur_stock", { p_magasin_id: magasinId }),
         supabase.rpc("rapport_rotation_lente", { p_magasin_id: magasinId, p_jours: 30 }),
         supabase.from("produits_a_reapprovisionner").select("*").eq("magasin_id", magasinId),
+        supabase.from("alertes_stock_negatif").select("produit_id, nom, quantite").eq("magasin_id", magasinId),
+        supabase
+          .from("ventes")
+          .select("id", { count: "exact", head: true })
+          .eq("magasin_id", magasinId)
+          .eq("hors_ligne", true)
+          .gte("cree_le", new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()),
       ]);
 
       setCa(dataCa ?? []);
@@ -78,6 +89,8 @@ export default function PageGerant() {
       setValeurStock(dataValeurStock?.[0] ?? null);
       setRotationLente(dataRotationLente ?? []);
       setAReapprovisionner(dataReappro ?? []);
+      setStocksNegatifs(dataStocksNegatifs ?? []);
+      setVentesHorsLigne(nbVentesHorsLigne ?? 0);
       setChargement(false);
     }
 
@@ -139,6 +152,39 @@ export default function PageGerant() {
             </p>
           </div>
         </section>
+
+        {/* Stock négatif — conséquence de ventes faites hors ligne */}
+        {stocksNegatifs.length > 0 && (
+          <section className="rounded-md p-5" style={{ background: "#FBEAE8", border: "1px solid #E8B4AE" }}>
+            <h2
+              className="police-titre font-semibold text-sm uppercase tracking-wide mb-1"
+              style={{ color: "var(--couleur-danger)" }}
+            >
+              Stock négatif à corriger ({stocksNegatifs.length})
+            </h2>
+            <p className="text-sm mb-3" style={{ color: "var(--couleur-danger)" }}>
+              Des ventes faites pendant une coupure internet ont dépassé le stock enregistré. Comptez ces
+              articles en rayon, puis ajoutez le stock réel dans « Produits ».
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {stocksNegatifs.map((p) => (
+                <li key={p.produit_id} className="flex items-center justify-between text-sm">
+                  <span>{p.nom}</span>
+                  <span className="font-medium" style={{ color: "var(--couleur-danger)" }}>
+                    {p.quantite} en stock
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {ventesHorsLigne > 0 && (
+          <p className="text-sm" style={{ color: "#6B6858" }}>
+            {ventesHorsLigne} vente(s) enregistrée(s) hors ligne ces 7 derniers jours, puis envoyée(s) au
+            retour de la connexion.
+          </p>
+        )}
 
         {/* Alerte réapprovisionnement — mise en avant si non vide */}
         {aReapprovisionner.length > 0 && (

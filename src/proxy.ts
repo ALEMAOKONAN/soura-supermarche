@@ -12,6 +12,6 @@ export const config = {
      * ressources internes Next.js, pour ne pas ralentir le chargement
      * des images/CSS/JS avec une vérification de session inutile.
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

@@ -1,7 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
+import {
+  ajouterAFile,
+  chercherDansCatalogue,
+  enregistrerCatalogue,
+  enregistrerProfil,
+  estErreurReseau,
+  lireFile,
+  lireProfil,
+  marquerErreur,
+  nouvelIdentifiant,
+  retirerDeFile,
+  type ProfilCaisse,
+  type VenteEnAttente,
+} from "@/lib/hors-ligne";
 
 type Produit = {
   id: string;
@@ -30,6 +44,7 @@ type TicketRecu = {
   montantRecu: number | null;
   monnaie: number | null;
   client: { nom: string; pointsGagnes: number; soldePoints: number } | null;
+  horsLigne: boolean;
 };
 
 type InfosMagasin = { nomMagasin: string; adresse: string; nomCaissier: string };
@@ -60,6 +75,13 @@ export default function PageCaisse() {
   const [infosMagasin, setInfosMagasin] = useState<InfosMagasin | null>(null);
   const [dernierTicket, setDernierTicket] = useState<TicketRecu | null>(null);
 
+  // Mode hors ligne
+  const [enLigne, setEnLigne] = useState(true);
+  const [profilCaisse, setProfilCaisse] = useState<ProfilCaisse | null>(null);
+  const [fileAttente, setFileAttente] = useState<VenteEnAttente[]>([]);
+  const [synchroEnCours, setSynchroEnCours] = useState(false);
+  const synchroVerrou = useRef(false);
+
   // Fidélité — rattachement d'un client optionnel au moment du paiement
   const [telephoneClient, setTelephoneClient] = useState("");
   const [clientTrouve, setClientTrouve] = useState<Client | null>(null);
@@ -67,31 +89,128 @@ export default function PageCaisse() {
   const [nomNouveauClient, setNomNouveauClient] = useState("");
   const [pointsGagnes, setPointsGagnes] = useState<number | null>(null);
 
-  // Récupère le rôle une fois au chargement, pour savoir si le lien
-  // "Gestion" doit apparaître dans l'en-tête (masqué pour les caissiers).
-  useEffect(() => {
-    async function chargerRole() {
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) return;
-      const { data: profil } = await supabase
-        .from("utilisateurs")
-        .select("role, nom_complet, magasins(nom, adresse, ville)")
-        .eq("id", authData.user.id)
-        .single();
-      if (!profil) return;
+  // --- Chargement initial -----------------------------------------------------
+  // En ligne : on lit le profil depuis la base et on le mémorise sur le poste.
+  // Hors ligne : on reprend le profil mémorisé, pour pouvoir encaisser quand même.
+  const appliquerProfil = useCallback((profil: ProfilCaisse) => {
+    setProfilCaisse(profil);
+    setRoleUtilisateur(profil.role);
+    setInfosMagasin({
+      nomMagasin: profil.nomMagasin,
+      adresse: profil.adresse,
+      nomCaissier: profil.nomCaissier,
+    });
+  }, []);
 
-      setRoleUtilisateur(profil.role);
-
-      // En-tête du reçu : nom et adresse du magasin, nom du caissier.
-      const magasin = profil.magasins as unknown as { nom: string; adresse: string | null; ville: string | null } | null;
-      setInfosMagasin({
-        nomMagasin: magasin?.nom ?? "SOURA Marché",
-        adresse: [magasin?.adresse, magasin?.ville].filter(Boolean).join(", "),
-        nomCaissier: profil.nom_complet,
-      });
-    }
-    chargerRole();
+  // Catalogue complet gardé sur le poste, pour chercher et scanner sans internet.
+  const rafraichirCatalogue = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("produits")
+      .select("id, nom, code_barre, unite, prix_vente, est_pese")
+      .eq("actif", true)
+      .order("nom");
+    if (!error && data) enregistrerCatalogue(data);
   }, [supabase]);
+
+  useEffect(() => {
+    // Service worker : permet de rouvrir la caisse même sans connexion.
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
+    setEnLigne(navigator.onLine);
+    setFileAttente(lireFile());
+
+    async function chargerProfil() {
+      try {
+        const { data: authData, error: erreurAuth } = await supabase.auth.getUser();
+        if (erreurAuth) throw erreurAuth;
+        if (!authData.user) return;
+        const { data: profil, error } = await supabase
+          .from("utilisateurs")
+          .select("role, organisation_id, magasin_id, nom_complet, magasins(nom, adresse, ville)")
+          .eq("id", authData.user.id)
+          .single();
+        if (error) throw error;
+        if (!profil) return;
+
+        const magasin = profil.magasins as unknown as { nom: string; adresse: string | null; ville: string | null } | null;
+        const complet: ProfilCaisse = {
+          role: profil.role,
+          organisation_id: profil.organisation_id,
+          magasin_id: profil.magasin_id,
+          nomCaissier: profil.nom_complet,
+          nomMagasin: magasin?.nom ?? "SOURA Marché",
+          adresse: [magasin?.adresse, magasin?.ville].filter(Boolean).join(", "),
+        };
+        enregistrerProfil(complet);
+        appliquerProfil(complet);
+        rafraichirCatalogue();
+      } catch {
+        // Pas de connexion : on travaille avec le profil mémorisé sur le poste.
+        const memorise = lireProfil();
+        if (memorise) appliquerProfil(memorise);
+      }
+    }
+    chargerProfil();
+
+    // Catalogue remis à jour toutes les 10 minutes tant que la connexion tient.
+    const intervalleCatalogue = setInterval(() => {
+      if (navigator.onLine) rafraichirCatalogue();
+    }, 10 * 60 * 1000);
+
+    const passerEnLigne = () => setEnLigne(true);
+    const passerHorsLigne = () => setEnLigne(false);
+    window.addEventListener("online", passerEnLigne);
+    window.addEventListener("offline", passerHorsLigne);
+    return () => {
+      clearInterval(intervalleCatalogue);
+      window.removeEventListener("online", passerEnLigne);
+      window.removeEventListener("offline", passerHorsLigne);
+    };
+  }, [supabase, appliquerProfil, rafraichirCatalogue]);
+
+  // --- Synchronisation des ventes en attente ---------------------------------
+  // Envoie les ventes une par une. S'arrête à la première coupure réseau ;
+  // une vente refusée par la base reste en file avec son message d'erreur.
+  const synchroniser = useCallback(async () => {
+    if (synchroVerrou.current || !navigator.onLine) return;
+    const file = lireFile();
+    if (file.length === 0) return;
+
+    synchroVerrou.current = true;
+    setSynchroEnCours(true);
+    try {
+      for (const vente of file) {
+        const { error } = await supabase.rpc("synchroniser_vente_hors_ligne", {
+          p_vente_id: vente.id,
+          p_magasin_id: vente.magasin_id,
+          p_mode_paiement: vente.mode_paiement,
+          p_lignes: vente.lignes,
+          p_date_vente: vente.date,
+        });
+        if (!error) {
+          retirerDeFile(vente.id);
+        } else if (estErreurReseau(error)) {
+          setEnLigne(false);
+          break;
+        } else {
+          marquerErreur(vente.id, error.message);
+        }
+      }
+    } finally {
+      setFileAttente(lireFile());
+      synchroVerrou.current = false;
+      setSynchroEnCours(false);
+    }
+  }, [supabase]);
+
+  // Dès que la connexion revient, et toutes les 30 secondes par précaution.
+  useEffect(() => {
+    if (enLigne) synchroniser();
+    const intervalle = setInterval(synchroniser, 30 * 1000);
+    return () => clearInterval(intervalle);
+  }, [enLigne, synchroniser]);
 
   // Impression automatique : dès qu'une vente est validée, un nouveau ticket
   // est créé, et on lance l'impression. Le court délai laisse React afficher
@@ -110,12 +229,22 @@ export default function PageCaisse() {
       return;
     }
     const delai = setTimeout(async () => {
-      const { data } = await supabase
+      if (!navigator.onLine) {
+        setResultats(chercherDansCatalogue(recherche));
+        return;
+      }
+      const { data, error } = await supabase
         .from("produits")
         .select("id, nom, code_barre, unite, prix_vente, est_pese")
         .eq("actif", true)
         .or(`nom.ilike.%${recherche}%,code_barre.eq.${recherche}`)
         .limit(8);
+      if (error) {
+        // Réseau instable : on bascule sur le catalogue du poste.
+        setResultats(chercherDansCatalogue(recherche));
+        if (estErreurReseau(error)) setEnLigne(false);
+        return;
+      }
       setResultats(data ?? []);
     }, 200);
     return () => clearTimeout(delai);
@@ -202,36 +331,60 @@ export default function PageCaisse() {
     setDernierTicket(null);
 
     try {
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) throw new Error("Session expirée, reconnectez-vous.");
+      const magasinId = profilCaisse?.magasin_id;
+      if (!magasinId) {
+        throw new Error(
+          "Profil caissier introuvable. Connectez-vous au moins une fois avec internet sur ce poste."
+        );
+      }
 
-      const { data: profil, error: erreurProfil } = await supabase
-        .from("utilisateurs")
-        .select("organisation_id, magasin_id")
-        .eq("id", authData.user.id)
-        .single();
-      if (erreurProfil || !profil?.magasin_id) throw new Error("Profil caissier introuvable.");
+      // Identifiant créé sur le poste : si la même vente est envoyée deux fois
+      // (connexion coupée pendant l'envoi), la base ne l'enregistre qu'une fois.
+      const venteId = nouvelIdentifiant();
+      const lignes = panier.map((l) => ({
+        produit_id: l.produit.id,
+        quantite: l.quantite,
+        prix_unitaire: l.produit.prix_vente,
+      }));
 
-      // Un seul appel atomique : en-tête + lignes créés dans la même
-      // transaction côté base. Si un article a un stock insuffisant, TOUTE
-      // la vente est annulée — jamais d'en-tête de vente "fantôme" à 0 F.
-      const { data: venteId, error: erreurVente } = await supabase.rpc("creer_vente", {
-        p_magasin_id: profil.magasin_id,
-        p_mode_paiement: modePaiement,
-        p_lignes: panier.map((l) => ({
-          produit_id: l.produit.id,
-          quantite: l.quantite,
-          prix_unitaire: l.produit.prix_vente,
-        })),
-      });
-      if (erreurVente) throw new Error(erreurVente.message || "Stock insuffisant sur un article.");
+      let horsLigne = !navigator.onLine;
 
-      // Fidélité : rattachement du client + calcul des points, uniquement
-      // si un client a été sélectionné avant l'encaissement. Une erreur ici
-      // n'annule pas la vente déjà validée — elle est juste signalée.
+      if (!horsLigne) {
+        // En ligne : vente atomique avec contrôle du stock, comme avant.
+        const { error: erreurVente } = await supabase.rpc("creer_vente", {
+          p_magasin_id: magasinId,
+          p_mode_paiement: modePaiement,
+          p_lignes: lignes,
+          p_vente_id: venteId,
+        });
+        if (erreurVente) {
+          if (estErreurReseau(erreurVente)) {
+            horsLigne = true; // coupure pendant l'envoi : on bascule en file d'attente
+          } else {
+            throw new Error(erreurVente.message || "Stock insuffisant sur un article.");
+          }
+        }
+      }
+
+      if (horsLigne) {
+        // Hors ligne : la vente est gardée sur le poste et partira au retour d'internet.
+        ajouterAFile({
+          id: venteId,
+          magasin_id: magasinId,
+          mode_paiement: modePaiement,
+          lignes,
+          date: new Date().toISOString(),
+          total,
+        });
+        setFileAttente(lireFile());
+        setEnLigne(false);
+      }
+
+      // Fidélité : uniquement en ligne (impossible de vérifier un client sans
+      // connexion). Une erreur ici n'annule pas la vente déjà validée.
       let clientSurTicket: TicketRecu["client"] = null;
 
-      if (clientTrouve && venteId) {
+      if (!horsLigne && clientTrouve) {
         const soldeAvant = clientTrouve.points_cumules;
         const { error: erreurFidelite } = await supabase.rpc("attribuer_points_fidelite", {
           p_vente_id: venteId,
@@ -258,7 +411,7 @@ export default function PageCaisse() {
       // Instantané pour le reçu, pris AVANT de vider le panier.
       const recu = modePaiement === "especes" && montantRecu !== "" ? Number(montantRecu) : null;
       setDernierTicket({
-        venteId: String(venteId),
+        venteId,
         date: new Date(),
         lignes: panier.map((l) => ({
           nom: l.produit.nom,
@@ -270,6 +423,7 @@ export default function PageCaisse() {
         montantRecu: recu,
         monnaie: recu !== null ? Math.max(0, recu - total) : null,
         client: clientSurTicket,
+        horsLigne,
       });
 
       setDerniereVenteTotal(total);
@@ -325,6 +479,41 @@ export default function PageCaisse() {
           </button>
         </div>
       </header>
+
+      {/* État de la connexion et des ventes en attente */}
+      {!enLigne && (
+        <div
+          role="status"
+          className="px-6 py-2 text-sm font-medium"
+          style={{ background: "#FFF4EC", color: "var(--couleur-accent-sombre)", borderBottom: "1px solid #F0C9A8" }}
+        >
+          Mode hors ligne : vous pouvez continuer à encaisser. Les ventes sont gardées sur ce poste
+          et seront envoyées dès le retour de la connexion.
+          {fileAttente.length > 0 && ` ${fileAttente.length} vente(s) en attente.`}
+        </div>
+      )}
+      {enLigne && fileAttente.length > 0 && (
+        <div
+          role="status"
+          className="px-6 py-2 text-sm flex items-center justify-between gap-3"
+          style={{ background: "#FFF4EC", color: "var(--couleur-accent-sombre)", borderBottom: "1px solid #F0C9A8" }}
+        >
+          <span>
+            {synchroEnCours
+              ? `Envoi de ${fileAttente.length} vente(s) faite(s) hors ligne…`
+              : fileAttente.some((v) => v.derniereErreur)
+                ? `${fileAttente.length} vente(s) hors ligne non envoyée(s). Dernière erreur : ${
+                    fileAttente.find((v) => v.derniereErreur)?.derniereErreur
+                  }`
+                : `${fileAttente.length} vente(s) hors ligne en attente d'envoi.`}
+          </span>
+          {!synchroEnCours && (
+            <button onClick={synchroniser} className="shrink-0 underline font-medium">
+              Envoyer maintenant
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 grid grid-cols-1 md:grid-cols-[1fr_360px]">
         {/* Recherche / scan produit */}
@@ -456,8 +645,12 @@ export default function PageCaisse() {
 
           {/* Paiement — toujours visible, jamais à faire défiler pour trouver "encaisser" */}
           <div className="p-5 border-t flex flex-col gap-3" style={{ borderColor: "var(--couleur-bordure)" }}>
-            {/* Fidélité — optionnel */}
-            {!clientTrouve ? (
+            {/* Fidélité — optionnel, et uniquement en ligne */}
+            {!enLigne ? (
+              <p className="text-xs" style={{ color: "#8A8676" }}>
+                Fidélité indisponible hors ligne : les points ne peuvent pas être attribués pendant la coupure.
+              </p>
+            ) : !clientTrouve ? (
               <div className="flex flex-col gap-2">
                 <div className="flex gap-2">
                   <input
@@ -568,7 +761,7 @@ export default function PageCaisse() {
                 style={{ background: "#E9F5EE", color: "var(--couleur-succes)" }}
               >
                 <span>
-                  Vente encaissée — {formateurFCFA.format(derniereVenteTotal)} F
+                  {dernierTicket?.horsLigne ? "Vente gardée sur le poste" : "Vente encaissée"} — {formateurFCFA.format(derniereVenteTotal)} F
                   {pointsGagnes !== null && pointsGagnes > 0 && ` · +${pointsGagnes} points fidélité`}
                 </span>
                 {dernierTicket && (
@@ -621,6 +814,7 @@ export default function PageCaisse() {
           {dernierTicket.date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
         </div>
         <div>Ticket n° {dernierTicket.venteId.slice(0, 8).toUpperCase()}</div>
+        {dernierTicket.horsLigne && <div>(Vente enregistrée hors ligne)</div>}
         {infosMagasin?.nomCaissier && <div>Caissier : {infosMagasin.nomCaissier}</div>}
 
         <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
