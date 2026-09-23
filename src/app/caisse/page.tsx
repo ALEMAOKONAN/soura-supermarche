@@ -19,6 +19,21 @@ type LignePanier = {
 
 type Client = { id: string; nom: string; points_cumules: number };
 
+// Instantané d'une vente validée, figé au moment de l'encaissement : le
+// panier est vidé juste après, le reçu doit donc garder sa propre copie.
+type TicketRecu = {
+  venteId: string;
+  date: Date;
+  lignes: { nom: string; quantite: number; prixUnitaire: number }[];
+  total: number;
+  modePaiement: string;
+  montantRecu: number | null;
+  monnaie: number | null;
+  client: { nom: string; pointsGagnes: number; soldePoints: number } | null;
+};
+
+type InfosMagasin = { nomMagasin: string; adresse: string; nomCaissier: string };
+
 const MODES_PAIEMENT = [
   { valeur: "especes", libelle: "Espèces" },
   { valeur: "carte", libelle: "Carte" },
@@ -38,9 +53,12 @@ export default function PageCaisse() {
   const [quantiteSaisie, setQuantiteSaisie] = useState<Record<string, string>>({});
   const [modePaiement, setModePaiement] = useState<(typeof MODES_PAIEMENT)[number]["valeur"]>("especes");
   const [montantRecu, setMontantRecu] = useState<string>("");
-  const [enCours, setEnCours] = useState(false);  const [erreur, setErreur] = useState<string | null>(null);
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
   const [derniereVenteTotal, setDerniereVenteTotal] = useState<number | null>(null);
   const [roleUtilisateur, setRoleUtilisateur] = useState<string | null>(null);
+  const [infosMagasin, setInfosMagasin] = useState<InfosMagasin | null>(null);
+  const [dernierTicket, setDernierTicket] = useState<TicketRecu | null>(null);
 
   // Fidélité — rattachement d'un client optionnel au moment du paiement
   const [telephoneClient, setTelephoneClient] = useState("");
@@ -57,10 +75,20 @@ export default function PageCaisse() {
       if (!authData.user) return;
       const { data: profil } = await supabase
         .from("utilisateurs")
-        .select("role")
+        .select("role, nom_complet, magasins(nom, adresse, ville)")
         .eq("id", authData.user.id)
         .single();
-      if (profil) setRoleUtilisateur(profil.role);
+      if (!profil) return;
+
+      setRoleUtilisateur(profil.role);
+
+      // En-tête du reçu : nom et adresse du magasin, nom du caissier.
+      const magasin = profil.magasins as unknown as { nom: string; adresse: string | null; ville: string | null } | null;
+      setInfosMagasin({
+        nomMagasin: magasin?.nom ?? "SOURA Marché",
+        adresse: [magasin?.adresse, magasin?.ville].filter(Boolean).join(", "),
+        nomCaissier: profil.nom_complet,
+      });
     }
     chargerRole();
   }, [supabase]);
@@ -162,6 +190,7 @@ export default function PageCaisse() {
     setErreur(null);
     setEnCours(true);
     setPointsGagnes(null);
+    setDernierTicket(null);
 
     try {
       const { data: authData } = await supabase.auth.getUser();
@@ -191,6 +220,8 @@ export default function PageCaisse() {
       // Fidélité : rattachement du client + calcul des points, uniquement
       // si un client a été sélectionné avant l'encaissement. Une erreur ici
       // n'annule pas la vente déjà validée — elle est juste signalée.
+      let clientSurTicket: TicketRecu["client"] = null;
+
       if (clientTrouve && venteId) {
         const soldeAvant = clientTrouve.points_cumules;
         const { error: erreurFidelite } = await supabase.rpc("attribuer_points_fidelite", {
@@ -203,9 +234,34 @@ export default function PageCaisse() {
             .select("points_cumules")
             .eq("id", clientTrouve.id)
             .single();
-          if (clientMaj) setPointsGagnes(clientMaj.points_cumules - soldeAvant);
+          if (clientMaj) {
+            const gagnes = clientMaj.points_cumules - soldeAvant;
+            setPointsGagnes(gagnes);
+            clientSurTicket = {
+              nom: clientTrouve.nom,
+              pointsGagnes: gagnes,
+              soldePoints: clientMaj.points_cumules,
+            };
+          }
         }
       }
+
+      // Instantané pour le reçu, pris AVANT de vider le panier.
+      const recu = modePaiement === "especes" && montantRecu !== "" ? Number(montantRecu) : null;
+      setDernierTicket({
+        venteId: String(venteId),
+        date: new Date(),
+        lignes: panier.map((l) => ({
+          nom: l.produit.nom,
+          quantite: l.quantite,
+          prixUnitaire: l.produit.prix_vente,
+        })),
+        total,
+        modePaiement: MODES_PAIEMENT.find((m) => m.valeur === modePaiement)?.libelle ?? modePaiement,
+        montantRecu: recu,
+        monnaie: recu !== null ? Math.max(0, recu - total) : null,
+        client: clientSurTicket,
+      });
 
       setDerniereVenteTotal(total);
       setPanier([]);
@@ -221,7 +277,17 @@ export default function PageCaisse() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col" style={{ background: "var(--couleur-fond)" }}>
+    <>
+    {/* Format d'impression : ticket thermique 80 mm, sans marges navigateur.
+        Sur une imprimante A4 classique, le ticket s'imprime en haut de page. */}
+    <style>{`
+      @media print {
+        @page { size: 80mm auto; margin: 0; }
+        html, body { background: white !important; }
+      }
+    `}</style>
+
+    <main className="min-h-screen flex flex-col print:hidden" style={{ background: "var(--couleur-fond)" }}>
       {/* En-tête */}
       <header
         className="flex items-center justify-between px-6 h-16 border-b"
@@ -488,10 +554,24 @@ export default function PageCaisse() {
             )}
 
             {derniereVenteTotal !== null && !erreur && (
-              <p className="text-sm rounded-md px-3 py-2" style={{ background: "#E9F5EE", color: "var(--couleur-succes)" }}>
-                Vente encaissée — {formateurFCFA.format(derniereVenteTotal)} F
-                {pointsGagnes !== null && pointsGagnes > 0 && ` · +${pointsGagnes} points fidélité`}
-              </p>
+              <div
+                className="flex items-center justify-between gap-3 text-sm rounded-md px-3 py-2"
+                style={{ background: "#E9F5EE", color: "var(--couleur-succes)" }}
+              >
+                <span>
+                  Vente encaissée — {formateurFCFA.format(derniereVenteTotal)} F
+                  {pointsGagnes !== null && pointsGagnes > 0 && ` · +${pointsGagnes} points fidélité`}
+                </span>
+                {dernierTicket && (
+                  <button
+                    onClick={() => window.print()}
+                    className="shrink-0 h-9 px-3 rounded-md text-sm font-medium text-white"
+                    style={{ background: "var(--couleur-marque)" }}
+                  >
+                    Imprimer le reçu
+                  </button>
+                )}
+              </div>
             )}
 
             <button
@@ -506,5 +586,84 @@ export default function PageCaisse() {
         </aside>
       </div>
     </main>
+
+    {/* Reçu — invisible à l'écran, seul élément imprimé */}
+    {dernierTicket && (
+      <div
+        className="hidden print:block"
+        style={{
+          width: "72mm",
+          padding: "4mm",
+          fontFamily: "'Courier New', ui-monospace, monospace",
+          fontSize: "11px",
+          lineHeight: 1.4,
+          color: "#000",
+        }}
+      >
+        <div style={{ textAlign: "center", marginBottom: "6px" }}>
+          <div style={{ fontSize: "14px", fontWeight: 700 }}>{infosMagasin?.nomMagasin ?? "SOURA Marché"}</div>
+          {infosMagasin?.adresse && <div>{infosMagasin.adresse}</div>}
+        </div>
+
+        <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+
+        <div>
+          Le {dernierTicket.date.toLocaleDateString("fr-FR")} à{" "}
+          {dernierTicket.date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+        </div>
+        <div>Ticket n° {dernierTicket.venteId.slice(0, 8).toUpperCase()}</div>
+        {infosMagasin?.nomCaissier && <div>Caissier : {infosMagasin.nomCaissier}</div>}
+
+        <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+
+        {dernierTicket.lignes.map((l, i) => (
+          <div key={i} style={{ marginBottom: "3px" }}>
+            <div>{l.nom}</div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>
+                {l.quantite} × {formateurFCFA.format(l.prixUnitaire)}
+              </span>
+              <span>{formateurFCFA.format(l.quantite * l.prixUnitaire)} F</span>
+            </div>
+          </div>
+        ))}
+
+        <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "14px", fontWeight: 700 }}>
+          <span>TOTAL</span>
+          <span>{formateurFCFA.format(dernierTicket.total)} F</span>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
+          <span>Paiement</span>
+          <span>{dernierTicket.modePaiement}</span>
+        </div>
+        {dernierTicket.montantRecu !== null && (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>Reçu</span>
+              <span>{formateurFCFA.format(dernierTicket.montantRecu)} F</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>Monnaie rendue</span>
+              <span>{formateurFCFA.format(dernierTicket.monnaie ?? 0)} F</span>
+            </div>
+          </>
+        )}
+
+        {dernierTicket.client && (
+          <>
+            <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+            <div>Client : {dernierTicket.client.nom}</div>
+            <div>Points gagnés : +{dernierTicket.client.pointsGagnes}</div>
+            <div>Solde fidélité : {dernierTicket.client.soldePoints} points</div>
+          </>
+        )}
+
+        <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+        <div style={{ textAlign: "center" }}>Merci de votre visite !</div>
+      </div>
+    )}
+    </>
   );
 }
