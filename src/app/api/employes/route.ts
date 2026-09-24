@@ -124,6 +124,8 @@ export async function POST(request: Request) {
     role,
     nom_complet,
     identifiant: identifiant || null,
+    // Mot de passe choisi par le gérant : l'employé devra le remplacer.
+    doit_changer_mdp: true,
   });
 
   if (erreurProfil) {

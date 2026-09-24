@@ -124,8 +124,8 @@ export default function PageEmployes() {
     setRole("caissier");
     setMessage(
       modeConnexion === "identifiant"
-        ? `Compte créé pour ${nom}. Identifiant de connexion : ${identifiant.trim().toLowerCase()}`
-        : `Compte créé pour ${nom || email}.`
+        ? `Compte créé pour ${nom}. Identifiant de connexion : ${identifiant.trim().toLowerCase()}. Il devra choisir son propre mot de passe à sa première connexion.`
+        : `Compte créé pour ${nom || email}. Il devra choisir son propre mot de passe à sa première connexion.`
     );
     chargerDonnees();
   }
@@ -205,7 +205,7 @@ export default function PageEmployes() {
 
     const connexion = employe.identifiant ? `identifiant « ${employe.identifiant} »` : "son adresse e-mail";
     setMessage(
-      `Nouveau mot de passe de ${employe.nom_complet} : ${nouveauMdp} — à lui transmettre avec ${connexion}.`
+      `Mot de passe provisoire de ${employe.nom_complet} : ${nouveauMdp} — à lui transmettre avec ${connexion}. Il devra le remplacer à sa prochaine connexion.`
     );
     setMdpOuvertPour(null);
     setNouveauMdp("");
@@ -506,8 +506,8 @@ export default function PageEmployes() {
                       </button>
                     </div>
                     <p className="text-xs" style={{ color: "#6B6858" }}>
-                      L&apos;ancien mot de passe ne fonctionnera plus. Transmettez le nouveau à l&apos;employé en main
-                      propre.
+                      L&apos;ancien mot de passe ne fonctionnera plus. Ce mot de passe est provisoire : l&apos;employé devra
+                      en choisir un nouveau à sa prochaine connexion.
                     </p>
                   </div>
                 )}

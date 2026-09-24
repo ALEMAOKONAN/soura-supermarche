@@ -135,5 +135,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
   }
 
+  // Le mot de passe communiqué par le gérant est provisoire : l'employé devra
+  // en choisir un nouveau à sa prochaine connexion.
+  await admin.from("utilisateurs").update({ doit_changer_mdp: true }).eq("id", employeId);
+
   return NextResponse.json({ succes: true });
 }

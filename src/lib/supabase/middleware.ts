@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // Décode les claims personnalisés (role, magasin_id, organisation_id) injectés
 // dans le JWT par le Custom Access Token Hook côté Supabase — évite une
 // requête à la table `utilisateurs` à chaque navigation.
-function decoderClaimsJwt(accessToken: string): { app_role?: string } {
+function decoderClaimsJwt(accessToken: string): { app_role?: string; doit_changer_mdp?: boolean } {
   try {
     const partiePayload = accessToken.split(".")[1];
     const jsonDecode = Buffer.from(partiePayload, "base64").toString("utf-8");
@@ -17,6 +17,7 @@ function decoderClaimsJwt(accessToken: string): { app_role?: string } {
 const ROUTES_PUBLIQUES = ["/"];
 const ROUTES_RESERVEES_GERANT = ["/gerant"];
 const ROUTES_RESERVEES_ADMIN = ["/gerant/employes"];
+const ROUTE_CHANGEMENT_MDP = "/changer-mot-de-passe";
 
 export async function mettreAJourSession(request: NextRequest) {
   let reponse = NextResponse.next({ request });
@@ -57,12 +58,23 @@ export async function mettreAJourSession(request: NextRequest) {
     return NextResponse.redirect(urlConnexion);
   }
 
-  if (user && estRoutePublique) {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+  if (!user) return reponse;
 
-    const claims = session ? decoderClaimsJwt(session.access_token) : {};
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const claims = session ? decoderClaimsJwt(session.access_token) : {};
+
+  // Mot de passe provisoire : tant qu'il n'a pas été remplacé, aucun écran
+  // n'est accessible, sauf celui qui permet de le changer. Les appels /api
+  // restent possibles (c'est par là que passe le changement lui-même).
+  if (claims.doit_changer_mdp === true && chemin !== ROUTE_CHANGEMENT_MDP && !chemin.startsWith("/api/")) {
+    const urlChangement = request.nextUrl.clone();
+    urlChangement.pathname = ROUTE_CHANGEMENT_MDP;
+    return NextResponse.redirect(urlChangement);
+  }
+
+  if (estRoutePublique) {
     const urlDestination = request.nextUrl.clone();
     // Un admin/gérant arrive directement sur son tableau de bord ; un
     // caissier, sur la caisse — sa seule interface au quotidien.
@@ -70,27 +82,17 @@ export async function mettreAJourSession(request: NextRequest) {
     return NextResponse.redirect(urlDestination);
   }
 
-  if (user && ROUTES_RESERVEES_GERANT.some((route) => chemin.startsWith(route))) {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+  if (session && ROUTES_RESERVEES_GERANT.some((route) => chemin.startsWith(route))) {
+    if (claims.app_role === "caissier") {
+      const urlCaisse = request.nextUrl.clone();
+      urlCaisse.pathname = "/caisse";
+      return NextResponse.redirect(urlCaisse);
+    }
 
-    if (session) {
-      const claims = decoderClaimsJwt(session.access_token);
-      if (claims.app_role === "caissier") {
-        const urlCaisse = request.nextUrl.clone();
-        urlCaisse.pathname = "/caisse";
-        return NextResponse.redirect(urlCaisse);
-      }
-
-      if (
-        ROUTES_RESERVEES_ADMIN.some((route) => chemin.startsWith(route)) &&
-        claims.app_role !== "admin_org"
-      ) {
-        const urlGerant = request.nextUrl.clone();
-        urlGerant.pathname = "/gerant";
-        return NextResponse.redirect(urlGerant);
-      }
+    if (ROUTES_RESERVEES_ADMIN.some((route) => chemin.startsWith(route)) && claims.app_role !== "admin_org") {
+      const urlGerant = request.nextUrl.clone();
+      urlGerant.pathname = "/gerant";
+      return NextResponse.redirect(urlGerant);
     }
   }
 
