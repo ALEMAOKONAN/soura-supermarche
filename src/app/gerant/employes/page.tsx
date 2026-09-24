@@ -6,6 +6,7 @@ import { creerClientSupabase } from "@/lib/supabase/client";
 type Employe = {
   id: string;
   nom_complet: string;
+  identifiant: string | null;
   role: "admin_org" | "gerant_magasin" | "caissier";
   actif: boolean;
   magasin_id: string;
@@ -33,6 +34,8 @@ export default function PageEmployes() {
 
   // Nouveau compte
   const [nom, setNom] = useState("");
+  const [modeConnexion, setModeConnexion] = useState<"identifiant" | "email">("identifiant");
+  const [identifiant, setIdentifiant] = useState("");
   const [email, setEmail] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
   const [role, setRole] = useState<Employe["role"]>("caissier");
@@ -66,7 +69,7 @@ export default function PageEmployes() {
     const [{ data: dataEmployes }, { data: dataMagasins }] = await Promise.all([
       supabase
         .from("utilisateurs")
-        .select("id, nom_complet, role, actif, magasin_id, magasins(nom)")
+        .select("id, nom_complet, identifiant, role, actif, magasin_id, magasins(nom)")
         .order("nom_complet"),
       supabase.from("magasins").select("id, nom").eq("actif", true).order("nom"),
     ]);
@@ -93,7 +96,8 @@ export default function PageEmployes() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email,
+        email: modeConnexion === "email" ? email : "",
+        identifiant: modeConnexion === "identifiant" ? identifiant : "",
         mot_de_passe: motDePasse,
         nom_complet: nom,
         role,
@@ -110,9 +114,14 @@ export default function PageEmployes() {
 
     setNom("");
     setEmail("");
+    setIdentifiant("");
     setMotDePasse("");
     setRole("caissier");
-    setMessage(`Compte créé pour ${nom || email}.`);
+    setMessage(
+      modeConnexion === "identifiant"
+        ? `Compte créé pour ${nom}. Identifiant de connexion : ${identifiant.trim().toLowerCase()}`
+        : `Compte créé pour ${nom || email}.`
+    );
     chargerDonnees();
   }
 
@@ -230,17 +239,63 @@ export default function PageEmployes() {
                 style={{ borderColor: "var(--couleur-bordure)" }}
               />
             </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">E-mail</span>
-              <input
-                required
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-10 px-3 rounded-md border bg-white text-sm outline-none focus:border-[var(--couleur-marque)]"
-                style={{ borderColor: "var(--couleur-bordure)" }}
-              />
-            </label>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">Se connecte avec</span>
+              <div className="flex gap-2">
+                {([
+                  { valeur: "identifiant", libelle: "Un identifiant" },
+                  { valeur: "email", libelle: "Une adresse e-mail" },
+                ] as const).map((option) => (
+                  <button
+                    key={option.valeur}
+                    type="button"
+                    onClick={() => setModeConnexion(option.valeur)}
+                    className="flex-1 h-10 rounded-md text-sm font-medium border"
+                    style={{
+                      borderColor: modeConnexion === option.valeur ? "var(--couleur-marque)" : "var(--couleur-bordure)",
+                      background: modeConnexion === option.valeur ? "var(--couleur-marque)" : "white",
+                      color: modeConnexion === option.valeur ? "white" : "var(--couleur-texte)",
+                    }}
+                  >
+                    {option.libelle}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {modeConnexion === "identifiant" ? (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">Identifiant</span>
+                <input
+                  required
+                  type="text"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  value={identifiant}
+                  onChange={(e) => setIdentifiant(e.target.value.toLowerCase().replace(/\s/g, ""))}
+                  placeholder="ex : awa.kone"
+                  pattern="[a-z0-9][a-z0-9._\-]{2,29}"
+                  title="3 à 30 caractères : lettres minuscules sans accent, chiffres, point, tiret ou tiret bas"
+                  className="h-10 px-3 rounded-md border bg-white text-sm outline-none focus:border-[var(--couleur-marque)]"
+                  style={{ borderColor: "var(--couleur-bordure)" }}
+                />
+                <span className="text-xs" style={{ color: "#8A8676" }}>
+                  Lettres minuscules sans accent, chiffres, point ou tiret. C&apos;est ce que l&apos;employé tapera pour se connecter.
+                </span>
+              </label>
+            ) : (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">E-mail</span>
+                <input
+                  required
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-10 px-3 rounded-md border bg-white text-sm outline-none focus:border-[var(--couleur-marque)]"
+                  style={{ borderColor: "var(--couleur-bordure)" }}
+                />
+              </label>
+            )}
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium">Mot de passe provisoire</span>
               <input
@@ -308,6 +363,7 @@ export default function PageEmployes() {
                 <div>
                   <p className="font-medium">{e.nom_complet}</p>
                   <p className="text-xs" style={{ color: "#8A8676" }}>
+                    {e.identifiant && <>Identifiant : {e.identifiant} · </>}
                     {e.magasins?.nom} {!e.actif && "· désactivé"}
                   </p>
                 </div>

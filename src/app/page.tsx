@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
+import { versEmailDeConnexion } from "@/lib/identifiant";
 
 export default function PageConnexion() {
-  const [email, setEmail] = useState("");
+  const [saisie, setSaisie] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -15,15 +16,16 @@ export default function PageConnexion() {
     setEnCours(true);
 
     const supabase = creerClientSupabase();
+    // Accepte un e-mail ("awa@exemple.com") ou un identifiant ("awa.kone").
     const { error } = await supabase.auth.signInWithPassword({
-      email,
+      email: versEmailDeConnexion(saisie),
       password: motDePasse,
     });
 
     setEnCours(false);
 
     if (error) {
-      setErreur("Identifiants incorrects. Vérifiez votre e-mail et votre mot de passe.");
+      setErreur("Identifiant ou mot de passe incorrect.");
       return;
     }
 
@@ -80,13 +82,16 @@ export default function PageConnexion() {
 
           <form onSubmit={seConnecter} className="flex flex-col gap-4">
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Adresse e-mail</span>
+              <span className="text-sm font-medium">Identifiant ou adresse e-mail</span>
               <input
-                type="email"
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="vous@votresupermarche.com"
+                value={saisie}
+                onChange={(e) => setSaisie(e.target.value)}
+                placeholder="awa.kone ou vous@votresupermarche.com"
                 className="h-11 px-3 rounded-md border bg-white text-sm outline-none transition-colors focus:border-[var(--couleur-marque)]"
                 style={{ borderColor: "var(--couleur-bordure)" }}
               />

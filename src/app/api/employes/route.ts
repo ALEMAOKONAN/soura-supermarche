@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { creerClientSupabaseServeur } from "@/lib/supabase/server";
 import { creerClientSupabaseAdmin } from "@/lib/supabase/admin";
+import { emailInterne, estIdentifiantValide, normaliserIdentifiant } from "@/lib/identifiant";
 
 export async function POST(request: Request) {
   const supabase = await creerClientSupabaseServeur();
@@ -30,11 +31,34 @@ export async function POST(request: Request) {
     );
   }
 
-  const { email, mot_de_passe, nom_complet, role, magasin_id } = await request.json();
+  const corps = await request.json();
+  const { mot_de_passe, nom_complet, role, magasin_id } = corps;
+  const emailSaisi: string = (corps.email ?? "").trim().toLowerCase();
+  const identifiant: string = normaliserIdentifiant(corps.identifiant ?? "");
 
-  if (!email || !mot_de_passe || !nom_complet || !role || !magasin_id) {
+  if (!mot_de_passe || !nom_complet || !role || !magasin_id) {
     return NextResponse.json({ erreur: "Champs manquants." }, { status: 400 });
   }
+
+  // Mode de connexion : identifiant OU e-mail (un seul des deux).
+  if (!identifiant && !emailSaisi) {
+    return NextResponse.json({ erreur: "Indiquez un identifiant ou une adresse e-mail." }, { status: 400 });
+  }
+  if (identifiant && !estIdentifiantValide(identifiant)) {
+    return NextResponse.json(
+      {
+        erreur:
+          "Identifiant invalide : 3 à 30 caractères, lettres minuscules sans accent, chiffres, point, tiret ou tiret bas (ex : awa.kone).",
+      },
+      { status: 400 }
+    );
+  }
+  if (typeof mot_de_passe !== "string" || mot_de_passe.length < 8) {
+    return NextResponse.json({ erreur: "Le mot de passe doit contenir au moins 8 caractères." }, { status: 400 });
+  }
+
+  // Pour un compte à identifiant, l'adresse de connexion est interne et invisible.
+  const email = identifiant ? emailInterne(identifiant) : emailSaisi;
 
   if (!["caissier", "gerant_magasin", "admin_org"].includes(role)) {
     return NextResponse.json({ erreur: "Rôle invalide." }, { status: 400 });
@@ -55,6 +79,20 @@ export async function POST(request: Request) {
 
   const admin = creerClientSupabaseAdmin();
 
+  if (identifiant) {
+    const { data: dejaPris } = await admin
+      .from("utilisateurs")
+      .select("id")
+      .eq("identifiant", identifiant)
+      .maybeSingle();
+    if (dejaPris) {
+      return NextResponse.json(
+        { erreur: `L'identifiant « ${identifiant} » est déjà utilisé. Essayez par exemple ${identifiant}2 ou prenom.nom.` },
+        { status: 409 }
+      );
+    }
+  }
+
   // 4. Création du compte d'authentification (nécessite la clé service_role).
   const { data: nouvelUtilisateur, error: erreurCreation } = await admin.auth.admin.createUser({
     email,
@@ -63,8 +101,15 @@ export async function POST(request: Request) {
   });
 
   if (erreurCreation || !nouvelUtilisateur.user) {
+    const dejaInscrit = /already|registered|exists/i.test(erreurCreation?.message ?? "");
     return NextResponse.json(
-      { erreur: erreurCreation?.message ?? "Impossible de créer le compte." },
+      {
+        erreur: dejaInscrit
+          ? identifiant
+            ? `L'identifiant « ${identifiant} » est déjà utilisé.`
+            : "Cette adresse e-mail est déjà utilisée par un autre compte."
+          : erreurCreation?.message ?? "Impossible de créer le compte.",
+      },
       { status: 400 }
     );
   }
@@ -78,6 +123,7 @@ export async function POST(request: Request) {
     magasin_id,
     role,
     nom_complet,
+    identifiant: identifiant || null,
   });
 
   if (erreurProfil) {
