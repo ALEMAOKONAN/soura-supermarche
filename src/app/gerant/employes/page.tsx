@@ -26,6 +26,11 @@ export default function PageEmployes() {
   const [accesRefuse, setAccesRefuse] = useState(false);
   const [monPropreId, setMonPropreId] = useState<string | null>(null);
   const [suppressionEnCours, setSuppressionEnCours] = useState<string | null>(null);
+
+  // Réinitialisation de mot de passe : un seul panneau ouvert à la fois
+  const [mdpOuvertPour, setMdpOuvertPour] = useState<string | null>(null);
+  const [nouveauMdp, setNouveauMdp] = useState("");
+  const [mdpEnCours, setMdpEnCours] = useState(false);
   const [chargement, setChargement] = useState(true);
   const [employes, setEmployes] = useState<Employe[]>([]);
   const [magasins, setMagasins] = useState<Magasin[]>([]);
@@ -158,6 +163,53 @@ export default function PageEmployes() {
       return;
     }
     chargerDonnees();
+  }
+
+  // Mot de passe facile à dicter : pas de caractères qui se confondent
+  // (0/o, 1/l/i), en deux groupes de 5 (ex : "k7mzp-3wqha").
+  function genererMotDePasse() {
+    const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+    const tirage = new Uint32Array(10);
+    crypto.getRandomValues(tirage);
+    const caracteres = Array.from(tirage, (n) => alphabet[n % alphabet.length]).join("");
+    setNouveauMdp(`${caracteres.slice(0, 5)}-${caracteres.slice(5)}`);
+  }
+
+  function ouvrirReinitialisation(employeId: string) {
+    setErreur(null);
+    setMessage(null);
+    setNouveauMdp("");
+    setMdpOuvertPour((actuel) => (actuel === employeId ? null : employeId));
+  }
+
+  async function reinitialiserMotDePasse(employe: Employe) {
+    if (nouveauMdp.length < 8) {
+      setErreur("Le nouveau mot de passe doit contenir au moins 8 caractères.");
+      return;
+    }
+    setErreur(null);
+    setMdpEnCours(true);
+
+    const reponse = await fetch(`/api/employes/${employe.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mot_de_passe: nouveauMdp }),
+    });
+    const resultat = await reponse.json();
+    setMdpEnCours(false);
+
+    if (!reponse.ok) {
+      setErreur(resultat.erreur ?? "Impossible de modifier le mot de passe.");
+      return;
+    }
+
+    const connexion = employe.identifiant ? `identifiant « ${employe.identifiant} »` : "son adresse e-mail";
+    setMessage(
+      `Nouveau mot de passe de ${employe.nom_complet} : ${nouveauMdp} — à lui transmettre avec ${connexion}.`
+    );
+    setMdpOuvertPour(null);
+    setNouveauMdp("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function supprimerEmploye(employeId: string, nomComplet: string) {
@@ -389,6 +441,16 @@ export default function PageEmployes() {
                     </button>
                   )}
                   <button
+                    onClick={() => ouvrirReinitialisation(e.id)}
+                    className="h-9 px-3 rounded-md text-sm border"
+                    style={{
+                      borderColor: mdpOuvertPour === e.id ? "var(--couleur-marque)" : "var(--couleur-bordure)",
+                      color: mdpOuvertPour === e.id ? "var(--couleur-marque)" : "var(--couleur-texte)",
+                    }}
+                  >
+                    Mot de passe
+                  </button>
+                  <button
                     onClick={() => basculerActif(e.id, e.actif)}
                     className="h-9 px-3 rounded-md text-sm border"
                     style={{ borderColor: "var(--couleur-bordure)" }}
@@ -406,6 +468,49 @@ export default function PageEmployes() {
                     </button>
                   )}
                 </div>
+
+                {mdpOuvertPour === e.id && (
+                  <div
+                    className="w-full flex flex-col gap-2 rounded-md p-3"
+                    style={{ background: "#F0EEE7" }}
+                  >
+                    <p className="text-sm font-medium">Nouveau mot de passe pour {e.nom_complet}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        autoComplete="new-password"
+                        value={nouveauMdp}
+                        onChange={(ev) => setNouveauMdp(ev.target.value)}
+                        placeholder="8 caractères minimum"
+                        className="flex-1 min-w-[180px] h-9 px-3 rounded-md border bg-white text-sm font-mono"
+                        style={{ borderColor: "var(--couleur-bordure)" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={genererMotDePasse}
+                        className="h-9 px-3 rounded-md text-sm border bg-white"
+                        style={{ borderColor: "var(--couleur-bordure)" }}
+                      >
+                        Générer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => reinitialiserMotDePasse(e)}
+                        disabled={mdpEnCours || nouveauMdp.length < 8}
+                        className="h-9 px-3 rounded-md text-sm text-white disabled:opacity-50"
+                        style={{ background: "var(--couleur-marque)" }}
+                      >
+                        {mdpEnCours ? "Enregistrement…" : "Valider"}
+                      </button>
+                    </div>
+                    <p className="text-xs" style={{ color: "#6B6858" }}>
+                      L&apos;ancien mot de passe ne fonctionnera plus. Transmettez le nouveau à l&apos;employé en main
+                      propre.
+                    </p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

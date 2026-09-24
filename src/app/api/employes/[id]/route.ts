@@ -73,3 +73,67 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   return NextResponse.json({ succes: true });
 }
+
+// ----------------------------------------------------------------------------
+// Réinitialisation du mot de passe d'un employé par un administrateur.
+// Utile surtout pour les comptes à identifiant, qui n'ont pas d'e-mail pour
+// réinitialiser eux-mêmes leur mot de passe.
+// ----------------------------------------------------------------------------
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: employeId } = await params;
+  const supabase = await creerClientSupabaseServeur();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ erreur: "Non authentifié." }, { status: 401 });
+  }
+
+  const { data: profilAppelant } = await supabase
+    .from("utilisateurs")
+    .select("organisation_id, role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profilAppelant || profilAppelant.role !== "admin_org") {
+    return NextResponse.json(
+      { erreur: "Seul un administrateur peut réinitialiser un mot de passe." },
+      { status: 403 }
+    );
+  }
+
+  const { mot_de_passe } = await request.json();
+
+  if (typeof mot_de_passe !== "string" || mot_de_passe.length < 8) {
+    return NextResponse.json(
+      { erreur: "Le nouveau mot de passe doit contenir au moins 8 caractères." },
+      { status: 400 }
+    );
+  }
+
+  const admin = creerClientSupabaseAdmin();
+
+  // Même garde-fou que pour la suppression : jamais le compte d'une autre entreprise.
+  const { data: employeCible } = await admin
+    .from("utilisateurs")
+    .select("organisation_id")
+    .eq("id", employeId)
+    .single();
+
+  if (!employeCible || employeCible.organisation_id !== profilAppelant.organisation_id) {
+    return NextResponse.json({ erreur: "Employé introuvable." }, { status: 404 });
+  }
+
+  const { error } = await admin.auth.admin.updateUserById(employeId, { password: mot_de_passe });
+
+  if (error) {
+    return NextResponse.json(
+      { erreur: error.message || "Impossible de modifier le mot de passe." },
+      { status: 400 }
+    );
+  }
+
+  return NextResponse.json({ succes: true });
+}
