@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { creerClientSupabase } from "@/lib/supabase/client";
 import VersionApp from "@/components/VersionApp";
+import BoutonRafraichir from "@/components/BoutonRafraichir";
 import { LIBELLES_ROLE, PAGES_GESTION, estRole, peutUtiliserCaisse, type Role } from "@/lib/roles";
 
 function BoutonsBasDeMenu({ role, onNaviguer }: { role: Role | null; onNaviguer?: () => void }) {
@@ -19,6 +20,7 @@ function BoutonsBasDeMenu({ role, onNaviguer }: { role: Role | null; onNaviguer?
           Caisse →
         </a>
       )}
+      <BoutonRafraichir className="px-3 py-2 rounded-md text-sm text-left" />
       <button
         onClick={async () => {
           const supabase = creerClientSupabase();

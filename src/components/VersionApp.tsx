@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useVersionApplicationWindows } from "@/lib/application-windows";
 
 // Informations injectées à la construction (voir next.config.ts)
 const VERSION = process.env.NEXT_PUBLIC_VERSION_APP ?? "?";
@@ -20,25 +20,9 @@ const dateLisible = DATE
     }).format(new Date(DATE))
   : null;
 
-type PontCaisse = { estApplicationCaisse?: boolean; versionApplication?: string };
-
-// Détecte l'application Windows (exe) et sa version.
-// - versions récentes de l'exe : version fournie directement par l'application
-// - première version de l'exe : version lue dans l'identifiant du navigateur
-function versionApplicationWindows(): string | null {
-  if (typeof window === "undefined") return null;
-  const pont = (window as unknown as { sourapos?: PontCaisse }).sourapos;
-  if (!pont?.estApplicationCaisse) return null;
-  if (pont.versionApplication) return pont.versionApplication;
-  const trouve = navigator.userAgent.match(/(\d+\.\d+\.\d+) Chrome\/[\d.]+ Electron\//);
-  return trouve ? trouve[1] : "1.0.0";
-}
-
-const sAbonner = () => () => {};
-
 export default function VersionApp({ className = "" }: { className?: string }) {
   // null côté serveur, valeur réelle une fois la page ouverte sur le poste.
-  const versionExe = useSyncExternalStore(sAbonner, versionApplicationWindows, () => null);
+  const versionExe = useVersionApplicationWindows();
 
   const detailSite =
     ENVIRONNEMENT === "local" ? "développement local" : [dateLisible, COMMIT].filter(Boolean).join(" · ");

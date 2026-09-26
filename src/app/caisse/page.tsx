@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
 import VersionApp from "@/components/VersionApp";
+import BoutonRafraichir from "@/components/BoutonRafraichir";
 import {
   ajouterAFile,
   chercherDansCatalogue,
@@ -464,6 +465,13 @@ export default function PageCaisse() {
           <p style={{ color: "#6B6858" }}>
             {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
           </p>
+          <BoutonRafraichir
+            confirmation={() =>
+              panier.length > 0
+                ? "Un ticket est en cours : les articles scannés seront perdus. Actualiser quand même ?"
+                : null
+            }
+          />
           {roleUtilisateur && roleUtilisateur !== "caissier" && (
             <a href="/gerant" style={{ color: "var(--couleur-marque)" }}>
               Gestion →
