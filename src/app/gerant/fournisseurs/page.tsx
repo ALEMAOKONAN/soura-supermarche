@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
+import { chargerProfilConnecte } from "@/lib/profil";
 
 type Fournisseur = { id: string; nom: string; telephone: string | null };
 type Produit = { id: string; nom: string };
@@ -59,14 +60,7 @@ export default function PageFournisseurs() {
   const [receptions, setReceptions] = useState<Record<string, { quantite: string; lot: string; peremption: string }>>({});
 
   async function chargerDonnees() {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) return;
-
-    const { data: profil } = await supabase
-      .from("utilisateurs")
-      .select("organisation_id, magasin_id")
-      .eq("id", authData.user.id)
-      .single();
+    const profil = await chargerProfilConnecte(supabase);
     if (!profil) return;
 
     setOrganisationId(profil.organisation_id);

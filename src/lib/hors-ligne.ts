@@ -56,15 +56,34 @@ function ecrire(cle: string, valeur: unknown) {
 }
 
 // --- Catalogue ---------------------------------------------------------------
-export const lireCatalogue = () => lire<ProduitCatalogue[]>(CLE_CATALOGUE, []);
-export const enregistrerCatalogue = (produits: ProduitCatalogue[]) => ecrire(CLE_CATALOGUE, produits);
+// Copie en mémoire : le catalogue n'est relu depuis le stockage qu'une fois,
+// la recherche à chaque frappe reste instantanée même avec des milliers d'articles.
+let catalogueEnMemoire: { produits: ProduitCatalogue[]; nomsMinuscules: string[] } | null = null;
+
+function preparer(produits: ProduitCatalogue[]) {
+  catalogueEnMemoire = { produits, nomsMinuscules: produits.map((p) => p.nom.toLowerCase()) };
+  return catalogueEnMemoire;
+}
+
+export const lireCatalogue = () => (catalogueEnMemoire ?? preparer(lire<ProduitCatalogue[]>(CLE_CATALOGUE, []))).produits;
+
+export function enregistrerCatalogue(produits: ProduitCatalogue[]) {
+  preparer(produits);
+  ecrire(CLE_CATALOGUE, produits);
+}
 
 export function chercherDansCatalogue(terme: string, limite = 8): ProduitCatalogue[] {
-  const t = terme.trim().toLowerCase();
+  const brut = terme.trim();
+  const t = brut.toLowerCase();
   if (t.length < 2) return [];
-  return lireCatalogue()
-    .filter((p) => p.code_barre === terme.trim() || p.nom.toLowerCase().includes(t))
-    .slice(0, limite);
+  const { produits, nomsMinuscules } = catalogueEnMemoire ?? preparer(lire<ProduitCatalogue[]>(CLE_CATALOGUE, []));
+
+  // Code-barre exact en premier : un scan tombe toujours sur le bon article.
+  const resultats = produits.filter((p) => p.code_barre === brut);
+  for (let i = 0; i < produits.length && resultats.length < limite; i++) {
+    if (nomsMinuscules[i].includes(t) && produits[i].code_barre !== brut) resultats.push(produits[i]);
+  }
+  return resultats.slice(0, limite);
 }
 
 // --- Profil du caissier ------------------------------------------------------

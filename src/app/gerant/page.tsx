@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
+import { chargerProfilConnecte } from "@/lib/profil";
 
 type LigneCA = { jour: string; nombre_ventes: number; chiffre_affaires: number };
 type LigneMeilleureVente = { produit_id: string; nom: string; quantite_vendue: number; chiffre_affaires: number };
@@ -29,19 +30,9 @@ export default function PageGerant() {
 
   useEffect(() => {
     async function charger() {
-      const { data: authData } = await supabase.auth.getUser();
-      if (!authData.user) {
-        window.location.href = "/";
-        return;
-      }
+      const profil = await chargerProfilConnecte(supabase);
 
-      const { data: profil, error: erreurProfil } = await supabase
-        .from("utilisateurs")
-        .select("role, magasin_id")
-        .eq("id", authData.user.id)
-        .single();
-
-      if (erreurProfil || !profil) {
+      if (!profil) {
         setErreur("Profil introuvable.");
         setChargement(false);
         return;

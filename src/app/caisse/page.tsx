@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
 import VersionApp from "@/components/VersionApp";
@@ -123,15 +124,19 @@ export default function PageCaisse() {
     setEnLigne(navigator.onLine);
     setFileAttente(lireFile());
 
+    // Le catalogue se charge en même temps que le profil, sans l'attendre.
+    if (navigator.onLine) rafraichirCatalogue();
+
     async function chargerProfil() {
       try {
-        const { data: authData, error: erreurAuth } = await supabase.auth.getUser();
-        if (erreurAuth) throw erreurAuth;
-        if (!authData.user) return;
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session) throw new Error("session indisponible");
         const { data: profil, error } = await supabase
           .from("utilisateurs")
           .select("role, organisation_id, magasin_id, nom_complet, magasins(nom, adresse, ville)")
-          .eq("id", authData.user.id)
+          .eq("id", session.user.id)
           .single();
         if (error) throw error;
         if (!profil) return;
@@ -147,7 +152,6 @@ export default function PageCaisse() {
         };
         enregistrerProfil(complet);
         appliquerProfil(complet);
-        rafraichirCatalogue();
       } catch {
         // Pas de connexion : on travaille avec le profil mémorisé sur le poste.
         const memorise = lireProfil();
@@ -156,10 +160,10 @@ export default function PageCaisse() {
     }
     chargerProfil();
 
-    // Catalogue remis à jour toutes les 10 minutes tant que la connexion tient.
+    // Catalogue remis à jour toutes les 5 minutes tant que la connexion tient.
     const intervalleCatalogue = setInterval(() => {
       if (navigator.onLine) rafraichirCatalogue();
-    }, 10 * 60 * 1000);
+    }, 5 * 60 * 1000);
 
     const passerEnLigne = () => setEnLigne(true);
     const passerHorsLigne = () => setEnLigne(false);
@@ -223,33 +227,43 @@ export default function PageCaisse() {
     return () => clearTimeout(minuteur);
   }, [dernierTicket]);
 
-  // Recherche produit (nom ou code-barre) — se relance à chaque frappe,
-  // avec un léger anti-rebond pour ne pas spammer l'API à chaque touche.
+  // Recherche produit (nom ou code-barre) :
+  //  1. réponse immédiate depuis le catalogue gardé sur le poste (aucune attente réseau) ;
+  //  2. puis vérification discrète auprès du serveur, qui met à jour les prix
+  //     et trouve un article créé depuis la dernière mise à jour du catalogue.
   useEffect(() => {
-    if (recherche.trim().length < 2) {
+    const terme = recherche.trim();
+    if (terme.length < 2) {
       setResultats([]);
       return;
     }
+    setResultats(chercherDansCatalogue(terme));
+    if (!navigator.onLine) return;
+
+    let annule = false;
     const delai = setTimeout(async () => {
-      if (!navigator.onLine) {
-        setResultats(chercherDansCatalogue(recherche));
-        return;
-      }
+      // Caractères qui ont un sens dans le filtre PostgREST : on les neutralise.
+      const saisie = terme.replace(/[,()*%\\]/g, " ");
       const { data, error } = await supabase
         .from("produits")
         .select("id, nom, code_barre, unite, prix_vente, est_pese")
         .eq("actif", true)
-        .or(`nom.ilike.%${recherche}%,code_barre.eq.${recherche}`)
+        .or(`nom.ilike.%${saisie}%,code_barre.eq.${saisie}`)
         .limit(8);
+      if (annule) return;
       if (error) {
-        // Réseau instable : on bascule sur le catalogue du poste.
-        setResultats(chercherDansCatalogue(recherche));
         if (estErreurReseau(error)) setEnLigne(false);
-        return;
+        return; // on garde les résultats du poste
       }
-      setResultats(data ?? []);
-    }, 200);
-    return () => clearTimeout(delai);
+      if (data && data.length > 0) {
+        // Code-barre exact en tête, comme pour la recherche locale
+        setResultats([...data].sort((x, y) => Number(y.code_barre === terme) - Number(x.code_barre === terme)));
+      }
+    }, 300);
+    return () => {
+      annule = true;
+      clearTimeout(delai);
+    };
   }, [recherche, supabase]);
 
   function ajouterAuPanier(produit: Produit) {
@@ -304,18 +318,12 @@ export default function PageCaisse() {
 
   async function creerClient() {
     if (!nomNouveauClient.trim()) return;
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) return;
-    const { data: profil } = await supabase
-      .from("utilisateurs")
-      .select("organisation_id")
-      .eq("id", authData.user.id)
-      .single();
-    if (!profil) return;
+    const organisationId = profilCaisse?.organisation_id;
+    if (!organisationId) return;
 
     const { data, error } = await supabase
       .from("clients")
-      .insert({ organisation_id: profil.organisation_id, nom: nomNouveauClient.trim(), telephone: telephoneClient.trim() })
+      .insert({ organisation_id: organisationId, nom: nomNouveauClient.trim(), telephone: telephoneClient.trim() })
       .select("id, nom, points_cumules")
       .single();
 
@@ -474,9 +482,9 @@ export default function PageCaisse() {
             }
           />
           {roleUtilisateur && roleUtilisateur !== "caissier" && (
-            <a href="/gerant" style={{ color: "var(--couleur-marque)" }}>
+            <Link href="/gerant" style={{ color: "var(--couleur-marque)" }}>
               Gestion →
-            </a>
+            </Link>
           )}
           <button
             onClick={async () => {

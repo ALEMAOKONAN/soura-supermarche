@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
+import { chargerProfilConnecte } from "@/lib/profil";
 import {
   PRIX_VIDE,
   majSaisiePrix,
@@ -9,6 +10,8 @@ import {
   validerSaisiePrix,
   type SaisiePrix,
 } from "@/lib/prix";
+
+const TRANCHE_AFFICHAGE = 50;
 
 type Produit = {
   id: string;
@@ -111,6 +114,8 @@ export default function PageProduits() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [filtre, setFiltre] = useState("");
+  // Affichage par tranches : des milliers d'articles affichés d'un coup figent l'écran.
+  const [nbAffiches, setNbAffiches] = useState(TRANCHE_AFFICHAGE);
 
   // Nouvel article
   const [nomNouveau, setNomNouveau] = useState("");
@@ -127,14 +132,7 @@ export default function PageProduits() {
   const [entreeEnCours, setEntreeEnCours] = useState(false);
 
   async function chargerDonnees() {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) return;
-
-    const { data: profil } = await supabase
-      .from("utilisateurs")
-      .select("organisation_id, magasin_id")
-      .eq("id", authData.user.id)
-      .single();
+    const profil = await chargerProfilConnecte(supabase);
 
     if (!profil) return;
     setOrganisationId(profil.organisation_id);
@@ -399,7 +397,10 @@ export default function PageProduits() {
             </h2>
             <input
               value={filtre}
-              onChange={(e) => setFiltre(e.target.value)}
+              onChange={(e) => {
+                setFiltre(e.target.value);
+                setNbAffiches(TRANCHE_AFFICHAGE);
+              }}
               placeholder="Rechercher un article…"
               className="h-9 px-3 rounded-md border bg-white text-sm w-full sm:w-64"
               style={bordure}
@@ -413,7 +414,7 @@ export default function PageProduits() {
           )}
 
           <div className="flex flex-col">
-            {produitsFiltres.map((p) => {
+            {produitsFiltres.slice(0, nbAffiches).map((p) => {
               const stockActuel = stocks[p.id] ?? 0;
               const stockBas = stockActuel <= Number(p.seuil_reappro);
               const ouvert = entreeOuvertePour === p.id;
@@ -516,6 +517,18 @@ export default function PageProduits() {
               );
             })}
           </div>
+
+          {produitsFiltres.length > nbAffiches && (
+            <button
+              type="button"
+              onClick={() => setNbAffiches((n) => n + TRANCHE_AFFICHAGE)}
+              className="mt-4 h-10 px-4 rounded-md border text-sm font-medium bg-white"
+              style={{ ...bordure, color: "var(--couleur-marque)" }}
+            >
+              Afficher {Math.min(TRANCHE_AFFICHAGE, produitsFiltres.length - nbAffiches)} articles de plus
+              (encore {produitsFiltres.length - nbAffiches})
+            </button>
+          )}
         </section>
       </div>
     </main>

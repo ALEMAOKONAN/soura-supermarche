@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
+import { chargerProfilConnecte } from "@/lib/profil";
 import { LIBELLES_ROLE, type Role } from "@/lib/roles";
 
 type Employe = {
@@ -50,18 +51,8 @@ export default function PageEmployes() {
   const [enregistrementEnCours, setEnregistrementEnCours] = useState<string | null>(null);
 
   async function chargerDonnees() {
-    const { data: authData } = await supabase.auth.getUser();
-    if (!authData.user) {
-      window.location.href = "/";
-      return;
-    }
-    setMonPropreId(authData.user.id);
-
-    const { data: profil } = await supabase
-      .from("utilisateurs")
-      .select("role")
-      .eq("id", authData.user.id)
-      .single();
+    const profil = await chargerProfilConnecte(supabase);
+    if (profil) setMonPropreId(profil.id);
 
     if (!profil || profil.role !== "admin_org") {
       setAccesRefuse(true);
