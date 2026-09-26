@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
 import { versEmailDeConnexion } from "@/lib/identifiant";
+import VersionApp from "@/components/VersionApp";
 
 export default function PageConnexion() {
   const [saisie, setSaisie] = useState("");
@@ -129,6 +130,8 @@ export default function PageConnexion() {
               {enCours ? "Connexion en cours…" : "Se connecter"}
             </button>
           </form>
+
+          <VersionApp className="mt-10 text-center" />
         </div>
       </section>
     </main>

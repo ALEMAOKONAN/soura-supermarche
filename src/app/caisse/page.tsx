@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
+import VersionApp from "@/components/VersionApp";
 import {
   ajouterAFile,
   chercherDansCatalogue,
@@ -557,6 +558,8 @@ export default function PageCaisse() {
               Le ticket est vide. Recherchez un article pour commencer.
             </p>
           )}
+
+          <VersionApp className="mt-auto pt-6" />
         </section>
 
         {/* Ticket en cours */}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { creerClientSupabase } from "@/lib/supabase/client";
+import VersionApp from "@/components/VersionApp";
 
 const LIENS = [
   { href: "/gerant", label: "Tableau de bord" },
@@ -85,6 +86,7 @@ export default function LayoutGerant({ children }: { children: React.ReactNode }
           ))}
           <div className="flex flex-col px-1 py-2">
             <BoutonsBasDeMenu onNaviguer={() => setMenuOuvert(false)} />
+            <VersionApp className="px-3 pt-2" />
           </div>
         </nav>
       )}
@@ -115,6 +117,7 @@ export default function LayoutGerant({ children }: { children: React.ReactNode }
 
         <div className="p-3 border-t flex flex-col gap-1" style={{ borderColor: "var(--couleur-bordure)" }}>
           <BoutonsBasDeMenu />
+          <VersionApp className="px-3 pt-2" />
         </div>
       </aside>
 
