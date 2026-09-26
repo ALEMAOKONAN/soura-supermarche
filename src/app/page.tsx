@@ -53,6 +53,7 @@ export default function PageConnexion() {
         <div className="relative">
           <p className="police-titre text-2xl font-bold text-white tracking-tight">
             SOURA Marché
+            <VersionApp couleur="rgba(255,255,255,0.6)" />
           </p>
           <p className="text-white/60 text-sm mt-1">Gestion de supermarché</p>
         </div>
@@ -73,6 +74,7 @@ export default function PageConnexion() {
           <div className="md:hidden mb-10">
             <p className="police-titre text-xl font-bold" style={{ color: "var(--couleur-marque)" }}>
               SOURA Marché
+              <VersionApp />
             </p>
           </div>
 
@@ -131,7 +133,6 @@ export default function PageConnexion() {
             </button>
           </form>
 
-          <VersionApp className="mt-10 text-center" />
         </div>
       </section>
     </main>

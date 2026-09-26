@@ -1,7 +1,4 @@
-"use client";
-
-import { useVersionApplicationWindows } from "@/lib/application-windows";
-
+// Numéro de version affiché à côté du nom de l'application (ex : V1.0.0).
 // Informations injectées à la construction (voir next.config.ts)
 const VERSION = process.env.NEXT_PUBLIC_VERSION_APP ?? "?";
 const DATE = process.env.NEXT_PUBLIC_DATE_VERSION;
@@ -20,23 +17,23 @@ const dateLisible = DATE
     }).format(new Date(DATE))
   : null;
 
-export default function VersionApp({ className = "" }: { className?: string }) {
-  // null côté serveur, valeur réelle une fois la page ouverte sur le poste.
-  const versionExe = useVersionApplicationWindows();
+const detail =
+  ENVIRONNEMENT === "local" ? "développement local" : [dateLisible, COMMIT].filter(Boolean).join(" · ");
 
-  const detailSite =
-    ENVIRONNEMENT === "local" ? "développement local" : [dateLisible, COMMIT].filter(Boolean).join(" · ");
-
-  // Détails techniques visibles au survol de la souris uniquement.
-  const titre = [
-    `Site : V${VERSION}${detailSite ? ` (mis en ligne le ${detailSite})` : ""}`,
-    versionExe ? `Application Windows : V${versionExe}` : "Ouvert dans un navigateur",
-  ].join("\n");
-
+export default function VersionApp({
+  className = "",
+  couleur = "#8A8676",
+}: {
+  className?: string;
+  couleur?: string;
+}) {
   return (
-    <p className={`text-xs ${className}`} style={{ color: "#8A8676" }} title={titre}>
+    <span
+      className={`ml-2 align-middle text-xs font-normal tracking-normal ${className}`}
+      style={{ color: couleur }}
+      title={`Version ${VERSION}${detail ? ` (mise en ligne : ${detail})` : ""}`}
+    >
       V{VERSION}
-      {versionExe && <> · Windows V{versionExe}</>}
-    </p>
+    </span>
   );
 }

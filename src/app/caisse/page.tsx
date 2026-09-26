@@ -460,6 +460,7 @@ export default function PageCaisse() {
       >
         <p className="police-titre font-semibold" style={{ color: "var(--couleur-marque)" }}>
           SOURA Marché · Caisse
+          <VersionApp />
         </p>
         <div className="flex items-center gap-5 text-sm">
           <p style={{ color: "#6B6858" }}>
@@ -567,7 +568,6 @@ export default function PageCaisse() {
             </p>
           )}
 
-          <VersionApp className="mt-auto pt-6" />
         </section>
 
         {/* Ticket en cours */}

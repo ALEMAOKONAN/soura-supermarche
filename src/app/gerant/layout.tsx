@@ -77,6 +77,7 @@ export default function LayoutGerant({ children }: { children: React.ReactNode }
       >
         <p className="police-titre font-semibold" style={{ color: "var(--couleur-marque)" }}>
           SOURA Marché
+          <VersionApp />
         </p>
         <button
           aria-label={menuOuvert ? "Fermer le menu" : "Ouvrir le menu"}
@@ -107,7 +108,6 @@ export default function LayoutGerant({ children }: { children: React.ReactNode }
           ))}
           <div className="flex flex-col px-1 py-2">
             <BoutonsBasDeMenu role={role} onNaviguer={() => setMenuOuvert(false)} />
-            <VersionApp className="px-3 pt-2" />
           </div>
         </nav>
       )}
@@ -120,6 +120,7 @@ export default function LayoutGerant({ children }: { children: React.ReactNode }
         <div className="h-16 px-5 flex items-center border-b" style={{ borderColor: "var(--couleur-bordure)" }}>
           <p className="police-titre font-semibold" style={{ color: "var(--couleur-marque)" }}>
             SOURA Marché
+            <VersionApp />
           </p>
         </div>
 
@@ -145,7 +146,6 @@ export default function LayoutGerant({ children }: { children: React.ReactNode }
             </p>
           )}
           <BoutonsBasDeMenu role={role} />
-          <VersionApp className="px-3 pt-2" />
         </div>
       </aside>
 
