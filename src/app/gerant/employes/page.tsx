@@ -2,23 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
+import { LIBELLES_ROLE, type Role } from "@/lib/roles";
 
 type Employe = {
   id: string;
   nom_complet: string;
   identifiant: string | null;
-  role: "admin_org" | "gerant_magasin" | "caissier";
+  role: Role;
   actif: boolean;
   magasin_id: string;
   magasins: { nom: string } | null;
 };
 type Magasin = { id: string; nom: string };
 
-const LIBELLES_ROLE: Record<string, string> = {
-  admin_org: "Administrateur",
-  gerant_magasin: "Gérant de magasin",
-  caissier: "Caissier",
-};
+// Ordre d'affichage dans les listes : du plus limité au plus étendu
+const ORDRE_ROLES: Role[] = ["caissier", "gestionnaire_stock", "gerant_magasin", "admin_org"];
 
 export default function PageEmployes() {
   const supabase = useMemo(() => creerClientSupabase(), []);
@@ -370,9 +368,9 @@ export default function PageEmployes() {
                   className="h-10 px-3 rounded-md border bg-white text-sm"
                   style={{ borderColor: "var(--couleur-bordure)" }}
                 >
-                  <option value="caissier">Caissier</option>
-                  <option value="gerant_magasin">Gérant de magasin</option>
-                  <option value="admin_org">Administrateur</option>
+                  {ORDRE_ROLES.map((r) => (
+                    <option key={r} value={r}>{LIBELLES_ROLE[r]}</option>
+                  ))}
                 </select>
               </label>
               <label className="flex flex-col gap-1.5 flex-1">
@@ -426,9 +424,9 @@ export default function PageEmployes() {
                     className="h-9 px-2 rounded-md border bg-white text-sm"
                     style={{ borderColor: "var(--couleur-bordure)" }}
                   >
-                    <option value="caissier">Caissier</option>
-                    <option value="gerant_magasin">Gérant de magasin</option>
-                    <option value="admin_org">Administrateur</option>
+                    {ORDRE_ROLES.map((r) => (
+                      <option key={r} value={r}>{LIBELLES_ROLE[r]}</option>
+                    ))}
                   </select>
                   {rolesModifies[e.id] && rolesModifies[e.id] !== e.role && (
                     <button

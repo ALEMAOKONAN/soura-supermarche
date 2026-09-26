@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { accueilDuRole, peutAcceder } from "@/lib/roles";
 
 // Décode les claims personnalisés (role, magasin_id, organisation_id) injectés
 // dans le JWT par le Custom Access Token Hook côté Supabase — évite une
@@ -15,8 +16,6 @@ function decoderClaimsJwt(accessToken: string): { app_role?: string; doit_change
 }
 
 const ROUTES_PUBLIQUES = ["/"];
-const ROUTES_RESERVEES_GERANT = ["/gerant"];
-const ROUTES_RESERVEES_ADMIN = ["/gerant/employes"];
 const ROUTE_CHANGEMENT_MDP = "/changer-mot-de-passe";
 
 export async function mettreAJourSession(request: NextRequest) {
@@ -75,25 +74,19 @@ export async function mettreAJourSession(request: NextRequest) {
   }
 
   if (estRoutePublique) {
+    // Chacun arrive sur son écran de travail : caisse pour un caissier,
+    // produits pour un gestionnaire de stock, tableau de bord sinon.
     const urlDestination = request.nextUrl.clone();
-    // Un admin/gérant arrive directement sur son tableau de bord ; un
-    // caissier, sur la caisse — sa seule interface au quotidien.
-    urlDestination.pathname = claims.app_role === "caissier" ? "/caisse" : "/gerant";
+    urlDestination.pathname = accueilDuRole(claims.app_role);
     return NextResponse.redirect(urlDestination);
   }
 
-  if (session && ROUTES_RESERVEES_GERANT.some((route) => chemin.startsWith(route))) {
-    if (claims.app_role === "caissier") {
-      const urlCaisse = request.nextUrl.clone();
-      urlCaisse.pathname = "/caisse";
-      return NextResponse.redirect(urlCaisse);
-    }
-
-    if (ROUTES_RESERVEES_ADMIN.some((route) => chemin.startsWith(route)) && claims.app_role !== "admin_org") {
-      const urlGerant = request.nextUrl.clone();
-      urlGerant.pathname = "/gerant";
-      return NextResponse.redirect(urlGerant);
-    }
+  // Écran non autorisé pour ce rôle : retour à son écran de travail.
+  // (Les règles par rôle sont centralisées dans src/lib/roles.ts.)
+  if (session && !peutAcceder(claims.app_role, chemin)) {
+    const urlDestination = request.nextUrl.clone();
+    urlDestination.pathname = accueilDuRole(claims.app_role);
+    return NextResponse.redirect(urlDestination);
   }
 
   return reponse;

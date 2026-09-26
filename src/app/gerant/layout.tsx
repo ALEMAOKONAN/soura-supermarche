@@ -1,28 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { creerClientSupabase } from "@/lib/supabase/client";
 import VersionApp from "@/components/VersionApp";
+import { LIBELLES_ROLE, PAGES_GESTION, estRole, peutUtiliserCaisse, type Role } from "@/lib/roles";
 
-const LIENS = [
-  { href: "/gerant", label: "Tableau de bord" },
-  { href: "/gerant/produits", label: "Produits" },
-  { href: "/gerant/fournisseurs", label: "Fournisseurs" },
-  { href: "/gerant/employes", label: "Employés" },
-];
-
-function BoutonsBasDeMenu({ onNaviguer }: { onNaviguer?: () => void }) {
+function BoutonsBasDeMenu({ role, onNaviguer }: { role: Role | null; onNaviguer?: () => void }) {
   return (
     <>
-      <a
-        href="/caisse"
-        onClick={onNaviguer}
-        className="px-3 py-2 rounded-md text-sm font-semibold"
-        style={{ color: "var(--couleur-accent)" }}
-      >
-        Caisse →
-      </a>
+      {role && peutUtiliserCaisse(role) && (
+        <a
+          href="/caisse"
+          onClick={onNaviguer}
+          className="px-3 py-2 rounded-md text-sm font-semibold"
+          style={{ color: "var(--couleur-accent)" }}
+        >
+          Caisse →
+        </a>
+      )}
       <button
         onClick={async () => {
           const supabase = creerClientSupabase();
@@ -41,6 +37,29 @@ function BoutonsBasDeMenu({ onNaviguer }: { onNaviguer?: () => void }) {
 export default function LayoutGerant({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [menuOuvert, setMenuOuvert] = useState(false);
+  const [role, setRole] = useState<Role | null>(null);
+  const [nomUtilisateur, setNomUtilisateur] = useState("");
+
+  // Rôle de la personne connectée : le menu n'affiche que ses écrans.
+  useEffect(() => {
+    async function chargerRole() {
+      const supabase = creerClientSupabase();
+      const { data: authData } = await supabase.auth.getUser();
+      if (!authData.user) return;
+      const { data: profil } = await supabase
+        .from("utilisateurs")
+        .select("role, nom_complet")
+        .eq("id", authData.user.id)
+        .single();
+      if (profil && estRole(profil.role)) {
+        setRole(profil.role);
+        setNomUtilisateur(profil.nom_complet);
+      }
+    }
+    chargerRole();
+  }, []);
+
+  const liens = role ? PAGES_GESTION.filter((p) => p.roles.includes(role)) : [];
 
   const lienStyle = (actif: boolean) => ({
     background: actif ? "var(--couleur-marque)" : "transparent",
@@ -73,7 +92,7 @@ export default function LayoutGerant({ children }: { children: React.ReactNode }
           className="md:hidden flex flex-col border-b"
           style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
         >
-          {LIENS.map((lien) => (
+          {liens.map((lien) => (
             <a
               key={lien.href}
               href={lien.href}
@@ -85,7 +104,7 @@ export default function LayoutGerant({ children }: { children: React.ReactNode }
             </a>
           ))}
           <div className="flex flex-col px-1 py-2">
-            <BoutonsBasDeMenu onNaviguer={() => setMenuOuvert(false)} />
+            <BoutonsBasDeMenu role={role} onNaviguer={() => setMenuOuvert(false)} />
             <VersionApp className="px-3 pt-2" />
           </div>
         </nav>
@@ -103,7 +122,7 @@ export default function LayoutGerant({ children }: { children: React.ReactNode }
         </div>
 
         <nav className="flex-1 py-4 px-3 flex flex-col gap-1">
-          {LIENS.map((lien) => (
+          {liens.map((lien) => (
             <a
               key={lien.href}
               href={lien.href}
@@ -116,7 +135,14 @@ export default function LayoutGerant({ children }: { children: React.ReactNode }
         </nav>
 
         <div className="p-3 border-t flex flex-col gap-1" style={{ borderColor: "var(--couleur-bordure)" }}>
-          <BoutonsBasDeMenu />
+          {role && (
+            <p className="px-3 pb-2 text-xs leading-snug" style={{ color: "#6B6858" }}>
+              {nomUtilisateur}
+              <br />
+              {LIBELLES_ROLE[role]}
+            </p>
+          )}
+          <BoutonsBasDeMenu role={role} />
           <VersionApp className="px-3 pt-2" />
         </div>
       </aside>

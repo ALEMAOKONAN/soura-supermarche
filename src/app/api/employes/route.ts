@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { creerClientSupabaseServeur } from "@/lib/supabase/server";
 import { creerClientSupabaseAdmin } from "@/lib/supabase/admin";
+import { estRole } from "@/lib/roles";
 import { emailInterne, estIdentifiantValide, normaliserIdentifiant } from "@/lib/identifiant";
 
 export async function POST(request: Request) {
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
   // Pour un compte à identifiant, l'adresse de connexion est interne et invisible.
   const email = identifiant ? emailInterne(identifiant) : emailSaisi;
 
-  if (!["caissier", "gerant_magasin", "admin_org"].includes(role)) {
+  if (!estRole(role)) {
     return NextResponse.json({ erreur: "Rôle invalide." }, { status: 400 });
   }
 
