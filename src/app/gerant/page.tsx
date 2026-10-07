@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
 import { chargerProfilConnecte } from "@/lib/profil";
+import Link from "next/link";
+import EnTetePage from "@/components/EnTetePage";
 
 type LigneCA = { jour: string; nombre_ventes: number; chiffre_affaires: number };
 type LigneMeilleureVente = { produit_id: string; nom: string; quantite_vendue: number; chiffre_affaires: number };
@@ -27,6 +29,7 @@ export default function PageGerant() {
   const [aReapprovisionner, setAReapprovisionner] = useState<LigneReappro[]>([]);
   const [stocksNegatifs, setStocksNegatifs] = useState<{ produit_id: string; nom: string; quantite: number }[]>([]);
   const [ventesHorsLigne, setVentesHorsLigne] = useState(0);
+  const [prenom, setPrenom] = useState("");
 
   useEffect(() => {
     async function charger() {
@@ -47,6 +50,7 @@ export default function PageGerant() {
       }
 
       const magasinId = profil.magasin_id;
+      setPrenom(profil.nom_complet.split(/\s+/)[0] ?? "");
 
       const [
         { data: dataCa },
@@ -91,7 +95,7 @@ export default function PageGerant() {
   if (chargement) {
     return (
       <main className="min-h-screen flex items-center justify-center" style={{ background: "var(--couleur-fond)" }}>
-        <p style={{ color: "#8A8676" }}>Chargement du tableau de bord…</p>
+        <p style={{ color: "var(--couleur-texte-3)" }}>Chargement du tableau de bord…</p>
       </main>
     );
   }
@@ -109,138 +113,157 @@ export default function PageGerant() {
 
   const caDuJour = ca[0]?.chiffre_affaires ?? 0;
   const nombreVentesDuJour = ca[0]?.nombre_ventes ?? 0;
+  const panierMoyen = nombreVentesDuJour > 0 ? caDuJour / nombreVentesDuJour : 0;
+  const maxVendu = Math.max(1, ...meilleuresVentes.map((p) => p.quantite_vendue));
+
+  const heure = new Date().getHours();
+  const salutation = heure < 18 ? "Bonjour" : "Bonsoir";
+  const dateDuJour = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+
+  const indicateurs = [
+    { libelle: "Chiffre d’affaires du jour", valeur: `${formateurFCFA.format(caDuJour)} F` },
+    { libelle: "Ventes du jour", valeur: String(nombreVentesDuJour) },
+    { libelle: "Panier moyen", valeur: `${formateurFCFA.format(panierMoyen)} F` },
+    { libelle: "Valeur du stock", valeur: `${formateurFCFA.format(valeurStock?.valeur_totale_vente ?? 0)} F`, note: "au prix de vente" },
+  ];
 
   return (
-    <main>
-      <header
-        className="flex items-center h-16 px-8 border-b"
-        style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
-      >
-        <p className="police-titre font-semibold text-lg">Tableau de bord</p>
-      </header>
+    <main className="pb-10">
+      <EnTetePage
+        surtitre={<span className="first-letter:uppercase inline-block">{dateDuJour}</span>}
+        titre={prenom ? `${salutation} ${prenom}` : "Tableau de bord"}
+      />
 
-      {erreur && (
-        <p className="mx-6 mt-4 text-sm rounded-md px-3 py-2" style={{ background: "#FBEAE8", color: "var(--couleur-danger)" }}>
-          {erreur}
-        </p>
-      )}
+      <div className="px-5 md:px-8 pt-5 flex flex-col gap-5">
+        {erreur && (
+          <p role="alert" className="text-sm rounded-[10px] px-3.5 py-2.5" style={{ background: "#FDE3E1", color: "var(--couleur-danger)" }}>
+            {erreur}
+          </p>
+        )}
 
-      <div className="max-w-5xl mx-auto p-6 flex flex-col gap-8">
         {/* Indicateurs du jour */}
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-px" style={{ background: "var(--couleur-bordure)" }}>
-          <div className="p-5" style={{ background: "var(--couleur-surface)" }}>
-            <p className="text-sm" style={{ color: "#8A8676" }}>Chiffre d&apos;affaires — aujourd&apos;hui</p>
-            <p className="police-titre text-3xl font-bold mt-1">{formateurFCFA.format(caDuJour)} F</p>
-          </div>
-          <div className="p-5" style={{ background: "var(--couleur-surface)" }}>
-            <p className="text-sm" style={{ color: "#8A8676" }}>Ventes — aujourd&apos;hui</p>
-            <p className="police-titre text-3xl font-bold mt-1">{nombreVentesDuJour}</p>
-          </div>
-          <div className="p-5" style={{ background: "var(--couleur-surface)" }}>
-            <p className="text-sm" style={{ color: "#8A8676" }}>Valeur du stock (prix de vente)</p>
-            <p className="police-titre text-3xl font-bold mt-1">
-              {formateurFCFA.format(valeurStock?.valeur_totale_vente ?? 0)} F
-            </p>
-          </div>
+        <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4" aria-label="Indicateurs du jour">
+          {indicateurs.map((k) => (
+            <div key={k.libelle} className="carte p-5 flex flex-col gap-2.5">
+              <p className="text-sm font-semibold" style={{ color: "var(--couleur-texte-2)" }}>{k.libelle}</p>
+              <p className="police-titre text-[30px] leading-none font-bold tracking-tight" style={{ color: "var(--couleur-marque)" }}>
+                {k.valeur}
+              </p>
+              {k.note && <span className="pastille pastille-neutre self-start">{k.note}</span>}
+            </div>
+          ))}
         </section>
 
         {/* Stock négatif — conséquence de ventes faites hors ligne */}
         {stocksNegatifs.length > 0 && (
-          <section className="rounded-md p-5" style={{ background: "#FBEAE8", border: "1px solid #E8B4AE" }}>
-            <h2
-              className="police-titre font-semibold text-sm uppercase tracking-wide mb-1"
-              style={{ color: "var(--couleur-danger)" }}
-            >
+          <section className="rounded-2xl p-5" style={{ background: "#FDE3E1", border: "1px solid #F5B8B2" }}>
+            <h2 className="titre-section mb-1" style={{ color: "#9B1C14" }}>
               Stock négatif à corriger ({stocksNegatifs.length})
             </h2>
-            <p className="text-sm mb-3" style={{ color: "var(--couleur-danger)" }}>
+            <p className="text-sm mb-3" style={{ color: "#9B1C14" }}>
               Des ventes faites pendant une coupure internet ont dépassé le stock enregistré. Comptez ces
-              articles en rayon, puis ajoutez le stock réel dans « Produits ».
+              articles en rayon, puis ajoutez le stock réel dans « Produits et stock ».
             </p>
-            <ul className="flex flex-col gap-1.5">
+            <ul className="flex flex-col">
               {stocksNegatifs.map((p) => (
-                <li key={p.produit_id} className="flex items-center justify-between text-sm">
-                  <span>{p.nom}</span>
-                  <span className="font-medium" style={{ color: "var(--couleur-danger)" }}>
-                    {p.quantite} en stock
-                  </span>
+                <li key={p.produit_id} className="flex items-center justify-between gap-3 py-2 border-t text-[15px]" style={{ borderColor: "#F5B8B2" }}>
+                  <span className="font-semibold">{p.nom}</span>
+                  <span className="pastille pastille-rupture">{p.quantite} en stock</span>
                 </li>
               ))}
             </ul>
           </section>
         )}
 
-        {ventesHorsLigne > 0 && (
-          <p className="text-sm" style={{ color: "#6B6858" }}>
-            {ventesHorsLigne} vente(s) enregistrée(s) hors ligne ces 7 derniers jours, puis envoyée(s) au
-            retour de la connexion.
-          </p>
-        )}
-
-        {/* Alerte réapprovisionnement — mise en avant si non vide */}
-        {aReapprovisionner.length > 0 && (
-          <section className="rounded-md p-5" style={{ background: "#FFF4EC", border: "1px solid #F0C9A8" }}>
-            <h2 className="police-titre font-semibold text-sm uppercase tracking-wide mb-3" style={{ color: "var(--couleur-accent-sombre)" }}>
-              À réapprovisionner ({aReapprovisionner.length})
-            </h2>
-            <ul className="flex flex-col gap-1.5">
-              {aReapprovisionner.map((p) => (
-                <li key={p.produit_id} className="flex items-center justify-between text-sm">
-                  <span>{p.nom}</span>
-                  <span style={{ color: "var(--couleur-accent-sombre)" }}>
-                    {p.quantite} restant{p.quantite > 1 ? "s" : ""} (seuil : {p.seuil_reappro})
-                  </span>
-                </li>
-              ))}
-            </ul>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          {/* À réapprovisionner */}
+          <section className="carte p-5 md:p-6 flex flex-col">
+            <div className="flex items-baseline justify-between gap-3 pb-2">
+              <h2 className="titre-section">À réapprovisionner</h2>
+              <Link href="/gerant/produits" className="text-sm font-semibold" style={{ color: "var(--couleur-marque)" }}>
+                Voir le stock
+              </Link>
+            </div>
+            {aReapprovisionner.length === 0 ? (
+              <p className="text-[15px] py-2" style={{ color: "var(--couleur-succes)" }}>Tout est au-dessus du seuil.</p>
+            ) : (
+              <ul className="flex flex-col">
+                {aReapprovisionner.map((p) => (
+                  <li key={p.produit_id} className="flex items-center justify-between gap-3 py-2.5 border-t" style={{ borderColor: "var(--couleur-ligne)" }}>
+                    <span className="flex flex-col">
+                      <span className="text-[15px] font-semibold">{p.nom}</span>
+                      <span className="text-[13px]" style={{ color: "var(--couleur-texte-2)" }}>
+                        Réapprovisionner sous {p.seuil_reappro}
+                      </span>
+                    </span>
+                    <span className={`pastille ${p.quantite <= 0 ? "pastille-rupture" : "pastille-bas"}`}>
+                      {p.quantite <= 0 ? "Rupture" : `${p.quantite} restant${p.quantite > 1 ? "s" : ""}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
-        )}
 
-        {/* Meilleures ventes */}
-        <section>
-          <h2 className="police-titre font-semibold text-sm uppercase tracking-wide mb-3" style={{ color: "#6B6858" }}>
-            Meilleures ventes (30 derniers jours)
-          </h2>
-          {meilleuresVentes.length === 0 ? (
-            <p className="text-sm" style={{ color: "#8A8676" }}>Aucune vente sur cette période.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <tbody>
+          {/* Meilleures ventes */}
+          <section className="carte p-5 md:p-6 flex flex-col gap-4">
+            <h2 className="titre-section">Meilleures ventes <span className="text-sm font-medium" style={{ color: "var(--couleur-texte-2)" }}>· 30 jours</span></h2>
+            {meilleuresVentes.length === 0 ? (
+              <p className="text-[15px]" style={{ color: "var(--couleur-texte-3)" }}>Aucune vente sur cette période.</p>
+            ) : (
+              <ul className="flex flex-col gap-3.5">
                 {meilleuresVentes.map((p) => (
-                  <tr key={p.produit_id} className="border-b" style={{ borderColor: "var(--couleur-bordure)" }}>
-                    <td className="py-2.5">{p.nom}</td>
-                    <td className="py-2.5 text-right" style={{ color: "#8A8676" }}>{p.quantite_vendue} vendus</td>
-                    <td className="py-2.5 text-right font-medium w-32">{formateurFCFA.format(p.chiffre_affaires)} F</td>
-                  </tr>
+                  <li key={p.produit_id} className="flex flex-col gap-1.5">
+                    <div className="flex justify-between gap-3 text-[15px]">
+                      <span className="font-semibold">{p.nom}</span>
+                      <span style={{ color: "var(--couleur-texte-2)" }}>
+                        {p.quantite_vendue} vendus · {formateurFCFA.format(p.chiffre_affaires)} F
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full" style={{ background: "var(--couleur-ligne)" }}>
+                      <div
+                        className="h-2 rounded-full"
+                        style={{ width: `${Math.round((p.quantite_vendue / maxVendu) * 100)}%`, background: "var(--couleur-marque-claire)" }}
+                      />
+                    </div>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          )}
-        </section>
+              </ul>
+            )}
+          </section>
 
-        {/* Rotation lente */}
-        <section>
-          <h2 className="police-titre font-semibold text-sm uppercase tracking-wide mb-3" style={{ color: "#6B6858" }}>
-            Rotation lente — aucune vente depuis 30 jours
-          </h2>
-          {rotationLente.length === 0 ? (
-            <p className="text-sm" style={{ color: "var(--couleur-succes)" }}>Aucun produit dormant détecté.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <tbody>
+          {/* Ventes hors ligne */}
+          <section className="rounded-2xl p-5 md:p-6 flex flex-col gap-2 text-white" style={{ background: "var(--couleur-marque)" }}>
+            <p className="text-sm font-semibold" style={{ color: "var(--couleur-sur-marque-2)" }}>Coupures internet · 7 derniers jours</p>
+            <p className="police-titre text-2xl font-bold">
+              {ventesHorsLigne === 0 ? "Aucune vente faite hors ligne" : `${ventesHorsLigne} vente${ventesHorsLigne > 1 ? "s" : ""} faite${ventesHorsLigne > 1 ? "s" : ""} hors ligne`}
+            </p>
+            <p className="text-sm" style={{ color: "var(--couleur-sur-marque)" }}>
+              {ventesHorsLigne === 0
+                ? "Les caisses sont restées connectées."
+                : "Elles ont été gardées sur les postes, puis envoyées au retour de la connexion."}
+            </p>
+          </section>
+
+          {/* Rotation lente */}
+          <section className="carte p-5 md:p-6 flex flex-col">
+            <h2 className="titre-section pb-2">Articles qui dorment <span className="text-sm font-medium" style={{ color: "var(--couleur-texte-2)" }}>· aucune vente depuis 30 jours</span></h2>
+            {rotationLente.length === 0 ? (
+              <p className="text-[15px] py-2" style={{ color: "var(--couleur-succes)" }}>Aucun produit dormant détecté.</p>
+            ) : (
+              <ul className="flex flex-col">
                 {rotationLente.map((p) => (
-                  <tr key={p.produit_id} className="border-b" style={{ borderColor: "var(--couleur-bordure)" }}>
-                    <td className="py-2.5">{p.nom}</td>
-                    <td className="py-2.5 text-right" style={{ color: "#8A8676" }}>
-                      {p.derniere_vente ? `Dernière vente : ${new Date(p.derniere_vente).toLocaleDateString("fr-FR")}` : "Jamais vendu"}
-                    </td>
-                    <td className="py-2.5 text-right font-medium w-32">{p.quantite_stock} en stock</td>
-                  </tr>
+                  <li key={p.produit_id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-2.5 border-t text-[15px]" style={{ borderColor: "var(--couleur-ligne)" }}>
+                    <span className="font-semibold">{p.nom}</span>
+                    <span style={{ color: "var(--couleur-texte-2)" }}>
+                      {p.derniere_vente ? `Dernière vente le ${new Date(p.derniere_vente).toLocaleDateString("fr-FR")}` : "Jamais vendu"} · {p.quantite_stock} en stock
+                    </span>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          )}
-        </section>
+              </ul>
+            )}
+          </section>
+        </div>
       </div>
     </main>
   );

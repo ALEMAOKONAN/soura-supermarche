@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
 import { chargerProfilConnecte } from "@/lib/profil";
+import EnTetePage from "@/components/EnTetePage";
+import Icone from "@/components/Icone";
 import {
   PRIX_VIDE,
   majSaisiePrix,
@@ -30,9 +32,8 @@ type SaisieEntree = { quantite: string; lot: string; peremption: string };
 const formateurFCFA = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 const formateurMarge = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
 
-const champ =
-  "h-10 px-3 rounded-md border bg-white text-sm outline-none focus:border-[var(--couleur-marque)]";
-const bordure = { borderColor: "var(--couleur-bordure)" };
+const champ = "champ";
+const bordure = {};
 
 function messageErreur(message: string): string {
   if (/idx_produits_code_barre|duplicate key/i.test(message)) {
@@ -46,9 +47,9 @@ function ChampsPrix({ saisie, onChange }: { saisie: SaisiePrix; onChange: (s: Sa
   const resume = resumePrix(saisie);
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">Prix d&apos;achat (F)</span>
+          <span className="text-sm font-semibold">Prix d&apos;achat (F)</span>
           <input
             required
             type="number"
@@ -62,7 +63,7 @@ function ChampsPrix({ saisie, onChange }: { saisie: SaisiePrix; onChange: (s: Sa
           />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">Marge (%)</span>
+          <span className="text-sm font-semibold">Marge (%)</span>
           <input
             type="number"
             step="any"
@@ -75,7 +76,7 @@ function ChampsPrix({ saisie, onChange }: { saisie: SaisiePrix; onChange: (s: Sa
           />
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">Prix de vente (F)</span>
+          <span className="text-sm font-semibold">Prix de vente (F)</span>
           <input
             required
             type="number"
@@ -84,15 +85,18 @@ function ChampsPrix({ saisie, onChange }: { saisie: SaisiePrix; onChange: (s: Sa
             inputMode="numeric"
             value={saisie.vente}
             onChange={(e) => onChange(majSaisiePrix(saisie, "vente", e.target.value))}
-            className={`${champ} font-semibold`}
+            className={`${champ} font-bold text-[17px]`}
             style={bordure}
           />
         </label>
       </div>
       {resume && (
         <p
-          className="text-xs"
-          style={{ color: resume.aPerte ? "var(--couleur-danger)" : "var(--couleur-succes)" }}
+          className="text-sm font-semibold rounded-[10px] px-3.5 py-2.5 mt-1"
+          style={{
+            color: resume.aPerte ? "#9B1C14" : "var(--couleur-marque-claire)",
+            background: resume.aPerte ? "#FDE3E1" : "var(--couleur-menthe)",
+          }}
         >
           {resume.aPerte
             ? `Attention : vente à perte de ${formateurFCFA.format(-resume.benefice)} F par unité.`
@@ -116,6 +120,8 @@ export default function PageProduits() {
   const [filtre, setFiltre] = useState("");
   // Affichage par tranches : des milliers d'articles affichés d'un coup figent l'écran.
   const [nbAffiches, setNbAffiches] = useState(TRANCHE_AFFICHAGE);
+  const [filtreStock, setFiltreStock] = useState<"tous" | "bas" | "rupture">("tous");
+  const [formulaireOuvert, setFormulaireOuvert] = useState(false);
 
   // Nouvel article
   const [nomNouveau, setNomNouveau] = useState("");
@@ -293,243 +299,305 @@ export default function PageProduits() {
     chargerDonnees();
   }
 
+  const etatStock = useCallback(
+    (p: Produit): "ok" | "bas" | "rupture" => {
+      const q = stocks[p.id] ?? 0;
+      if (q <= 0) return "rupture";
+      return q <= Number(p.seuil_reappro) ? "bas" : "ok";
+    },
+    [stocks]
+  );
+
   const produitsFiltres = useMemo(() => {
     const t = filtre.trim().toLowerCase();
-    if (!t) return produits;
-    return produits.filter((p) => p.nom.toLowerCase().includes(t) || p.code_barre === filtre.trim());
-  }, [produits, filtre]);
+    return produits.filter(
+      (p) =>
+        (!t || p.nom.toLowerCase().includes(t) || p.code_barre === filtre.trim()) &&
+        (filtreStock === "tous" || etatStock(p) === filtreStock)
+    );
+  }, [produits, filtre, filtreStock, etatStock]);
+
+  const nbBas = useMemo(() => produits.filter((p) => etatStock(p) === "bas").length, [produits, etatStock]);
+  const nbRupture = useMemo(() => produits.filter((p) => etatStock(p) === "rupture").length, [produits, etatStock]);
 
   if (chargement) {
     return (
       <main className="min-h-screen flex items-center justify-center" style={{ background: "var(--couleur-fond)" }}>
-        <p style={{ color: "#8A8676" }}>Chargement…</p>
+        <p style={{ color: "var(--couleur-texte-3)" }}>Chargement…</p>
       </main>
     );
   }
 
-  return (
-    <main>
-      <header
-        className="flex items-center h-16 px-8 border-b"
-        style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
-      >
-        <p className="police-titre font-semibold text-lg">Produits et stock</p>
-      </header>
+  const afficherFormulaire = formulaireOuvert || produits.length === 0;
+  const FILTRES: { valeur: typeof filtreStock; libelle: string }[] = [
+    { valeur: "tous", libelle: "Tous" },
+    { valeur: "bas", libelle: `Stock bas (${nbBas})` },
+    { valeur: "rupture", libelle: `Rupture (${nbRupture})` },
+  ];
 
-      <div className="max-w-3xl mx-auto p-6 flex flex-col gap-10">
+  return (
+    <main className="pb-10">
+      <EnTetePage
+        surtitre={`${produits.length} article${produits.length > 1 ? "s" : ""} actif${produits.length > 1 ? "s" : ""}`}
+        titre="Produits et stock"
+        actions={
+          produits.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFormulaireOuvert((v) => !v)}
+              aria-expanded={afficherFormulaire}
+              className={`bouton ${afficherFormulaire ? "bouton-secondaire" : "bouton-principal"}`}
+            >
+              <Icone nom={afficherFormulaire ? "fermer" : "plus"} taille={18} />
+              {afficherFormulaire ? "Fermer" : "Nouvel article"}
+            </button>
+          )
+        }
+      />
+
+      <div className="px-5 md:px-8 pt-5 max-w-6xl flex flex-col gap-5">
         {erreur && (
-          <p role="alert" className="text-sm rounded-md px-3 py-2" style={{ background: "#FBEAE8", color: "var(--couleur-danger)" }}>
+          <p role="alert" className="text-sm rounded-[10px] px-3.5 py-2.5" style={{ background: "#FDE3E1", color: "var(--couleur-danger)" }}>
             {erreur}
           </p>
         )}
         {message && !erreur && (
-          <p className="text-sm rounded-md px-3 py-2" style={{ background: "#E9F5EE", color: "var(--couleur-succes)" }}>
+          <p role="status" className="text-sm rounded-[10px] px-3.5 py-2.5" style={{ background: "#E3F3EA", color: "var(--couleur-succes)" }}>
             {message}
           </p>
         )}
 
         {/* Nouvel article */}
-        <section>
-          <h2 className="police-titre font-semibold text-sm uppercase tracking-wide mb-3" style={{ color: "#6B6858" }}>
-            Ajouter un article
-          </h2>
-          <form onSubmit={creerProduit} className="flex flex-col gap-4">
-            <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-3">
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium">Nom</span>
-                <input required value={nomNouveau} onChange={(e) => setNomNouveau(e.target.value)} className={champ} style={bordure} />
-              </label>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium">Code-barres (optionnel)</span>
-                <input
-                  value={codeBarreNouveau}
-                  onChange={(e) => setCodeBarreNouveau(e.target.value)}
-                  placeholder="Scannez ou tapez"
-                  className={champ}
-                  style={bordure}
-                />
-              </label>
-            </div>
+        {afficherFormulaire && (
+          <section className="carte p-5 md:p-6">
+            <h2 className="titre-section mb-4">Ajouter un article</h2>
+            <form onSubmit={creerProduit} className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-3">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-semibold">Nom</span>
+                  <input required value={nomNouveau} onChange={(e) => setNomNouveau(e.target.value)} className={champ} />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-sm font-semibold">
+                    Code-barres <span className="font-normal" style={{ color: "var(--couleur-texte-2)" }}>facultatif</span>
+                  </span>
+                  <input
+                    value={codeBarreNouveau}
+                    onChange={(e) => setCodeBarreNouveau(e.target.value)}
+                    placeholder="Scannez ou tapez"
+                    className={champ}
+                  />
+                </label>
+              </div>
 
-            <ChampsPrix saisie={prixNouveau} onChange={setPrixNouveau} />
+              <ChampsPrix saisie={prixNouveau} onChange={setPrixNouveau} />
 
-            <div className="flex flex-wrap items-end gap-3">
-              <label className="flex flex-col gap-1.5 w-40">
-                <span className="text-sm font-medium">Stock initial (optionnel)</span>
-                <input
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={stockInitial}
-                  onChange={(e) => setStockInitial(e.target.value)}
-                  className={champ}
-                  style={bordure}
-                />
-              </label>
-              <label className="flex flex-col gap-1.5 w-32">
-                <span className="text-sm font-medium">Seuil réappro</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={seuilNouveau}
-                  onChange={(e) => setSeuilNouveau(e.target.value)}
-                  className={champ}
-                  style={bordure}
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={creationEnCours}
-                className="h-10 px-5 rounded-md text-white text-sm font-medium disabled:opacity-60"
-                style={{ background: "var(--couleur-marque)" }}
-              >
-                {creationEnCours ? "Création…" : "Ajouter l'article"}
-              </button>
-            </div>
-          </form>
-        </section>
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="flex flex-col gap-1.5 w-40">
+                  <span className="text-sm font-semibold">
+                    Stock initial <span className="font-normal" style={{ color: "var(--couleur-texte-2)" }}>facultatif</span>
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={stockInitial}
+                    onChange={(e) => setStockInitial(e.target.value)}
+                    className={champ}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 w-36">
+                  <span className="text-sm font-semibold">Seuil réappro</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={seuilNouveau}
+                    onChange={(e) => setSeuilNouveau(e.target.value)}
+                    className={champ}
+                  />
+                </label>
+                <button type="submit" disabled={creationEnCours} className="bouton bouton-accent h-[46px]">
+                  {creationEnCours ? "Création…" : "Ajouter l'article"}
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
 
-        {/* Liste des articles */}
-        <section>
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-            <h2 className="police-titre font-semibold text-sm uppercase tracking-wide" style={{ color: "#6B6858" }}>
-              Articles ({produits.length})
-            </h2>
+        {/* Recherche et filtres */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <label
+            className="flex-1 basis-64 flex items-center gap-2.5 h-[46px] px-3.5 rounded-xl border bg-white focus-within:border-[var(--couleur-marque)]"
+            style={{ borderColor: "var(--couleur-bordure)" }}
+          >
+            <span style={{ color: "var(--couleur-texte-2)" }}>
+              <Icone nom="recherche" taille={18} />
+            </span>
             <input
               value={filtre}
+              aria-label="Rechercher un article"
               onChange={(e) => {
                 setFiltre(e.target.value);
                 setNbAffiches(TRANCHE_AFFICHAGE);
               }}
               placeholder="Rechercher un article…"
-              className="h-9 px-3 rounded-md border bg-white text-sm w-full sm:w-64"
-              style={bordure}
+              className="champ-nu flex-1 min-w-0 bg-transparent outline-none text-[15px]"
             />
-          </div>
+          </label>
+          {FILTRES.map((f) => {
+            const actif = filtreStock === f.valeur;
+            return (
+              <button
+                key={f.valeur}
+                type="button"
+                aria-pressed={actif}
+                onClick={() => {
+                  setFiltreStock(f.valeur);
+                  setNbAffiches(TRANCHE_AFFICHAGE);
+                }}
+                className="h-[46px] px-4 rounded-xl border text-[15px] font-semibold transition-colors"
+                style={{
+                  borderColor: actif ? "var(--couleur-marque)" : "var(--couleur-bordure)",
+                  background: actif ? "var(--couleur-marque)" : "#FFFFFF",
+                  color: actif ? "#FFFFFF" : "var(--couleur-texte)",
+                }}
+              >
+                {f.libelle}
+              </button>
+            );
+          })}
+        </div>
 
+        {/* Liste des articles */}
+        <section className="carte overflow-hidden" aria-label="Articles">
           {produitsFiltres.length === 0 && (
-            <p className="text-sm" style={{ color: "#8A8676" }}>
+            <p className="px-5 py-8 text-[15px] text-center" style={{ color: "var(--couleur-texte-2)" }}>
               {produits.length === 0 ? "Aucun article pour l'instant. Ajoutez le premier ci-dessus." : "Aucun article ne correspond."}
             </p>
           )}
 
-          <div className="flex flex-col">
-            {produitsFiltres.slice(0, nbAffiches).map((p) => {
-              const stockActuel = stocks[p.id] ?? 0;
-              const stockBas = stockActuel <= Number(p.seuil_reappro);
-              const ouvert = entreeOuvertePour === p.id;
-              return (
-                <div key={p.id} className="py-3 border-b flex flex-col gap-3" style={bordure}>
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">
-                        {p.nom}
-                        {p.code_barre && (
-                          <span className="text-xs font-normal ml-2" style={{ color: "#8A8676" }}>
-                            {p.code_barre}
-                          </span>
-                        )}
+          {produitsFiltres.slice(0, nbAffiches).map((p) => {
+            const stockActuel = stocks[p.id] ?? 0;
+            const etat = etatStock(p);
+            const ouvert = entreeOuvertePour === p.id;
+            return (
+              <div
+                key={p.id}
+                className="border-b last:border-b-0"
+                style={{ borderColor: "var(--couleur-ligne)", background: ouvert ? "#F7FAF8" : undefined }}
+              >
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-5 py-3.5">
+                  <div className="flex-1 basis-56 min-w-0">
+                    <p className="text-[15px] font-semibold truncate">{p.nom}</p>
+                    <p className="text-[13px]" style={{ color: "var(--couleur-texte-2)" }}>
+                      {p.code_barre ?? "Sans code-barres"}
+                    </p>
+                  </div>
+                  <div className="text-right w-24">
+                    <p className="text-[13px]" style={{ color: "var(--couleur-texte-2)" }}>Achat</p>
+                    <p className="text-[15px]">
+                      {p.prix_achat !== null ? `${formateurFCFA.format(Number(p.prix_achat))} F` : "—"}
+                    </p>
+                  </div>
+                  <div className="text-right w-28">
+                    <p className="text-[15px] font-bold">{formateurFCFA.format(Number(p.prix_vente))} F</p>
+                    {p.marge_pct !== null && (
+                      <p className="text-xs font-semibold" style={{ color: "var(--couleur-succes)" }}>
+                        marge {formateurMarge.format(Number(p.marge_pct))} %
                       </p>
-                      <p className="text-xs" style={{ color: "#8A8676" }}>
-                        {p.prix_achat !== null && <>Achat {formateurFCFA.format(Number(p.prix_achat))} F · </>}
-                        {p.marge_pct !== null && <>Marge {formateurMarge.format(Number(p.marge_pct))} % · </>}
-                        <span className="font-medium" style={{ color: "var(--couleur-texte)" }}>
-                          Vente {formateurFCFA.format(Number(p.prix_vente))} F
-                        </span>
-                        {" · "}
-                        <span style={{ color: stockBas ? "var(--couleur-accent-sombre)" : "#8A8676" }}>
-                          {stockActuel} en stock
-                        </span>
+                    )}
+                  </div>
+                  <div className="w-28 flex justify-end">
+                    <span className={`pastille pastille-${etat}`}>
+                      {etat === "rupture" ? "Rupture" : `${formateurMarge.format(stockActuel)} en stock`}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => ouvrirEntree(p)}
+                    aria-expanded={ouvert}
+                    className={`bouton ${ouvert ? "bouton-principal" : "bouton-secondaire"} min-h-0 h-10 px-3.5 text-sm`}
+                  >
+                    Entrée de stock
+                  </button>
+                </div>
+
+                {ouvert && (
+                  <div className="mx-4 mb-4 rounded-2xl border-2 bg-white p-5 flex flex-col gap-4" style={{ borderColor: "var(--couleur-marque)" }}>
+                    <div>
+                      <p className="text-[13px] font-bold uppercase tracking-wide" style={{ color: "var(--couleur-accent)" }}>
+                        Entrée de stock
+                      </p>
+                      <p className="police-titre text-xl font-bold">{p.nom}</p>
+                      <p className="text-sm" style={{ color: "var(--couleur-texte-2)" }}>
+                        Stock actuel : {formateurMarge.format(stockActuel)}
                       </p>
                     </div>
-                    <button
-                      onClick={() => ouvrirEntree(p)}
-                      className="shrink-0 h-9 px-3 rounded-md text-sm font-medium border"
-                      style={{
-                        borderColor: "var(--couleur-marque)",
-                        background: ouvert ? "var(--couleur-marque)" : "transparent",
-                        color: ouvert ? "white" : "var(--couleur-marque)",
-                      }}
-                    >
-                      Entrée de stock
-                    </button>
-                  </div>
+                    <label className="flex flex-col gap-1.5 w-44">
+                      <span className="text-sm font-semibold">Quantité reçue</span>
+                      <input
+                        autoFocus
+                        required
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={saisieEntree.quantite}
+                        onChange={(e) => setSaisieEntree((s) => ({ ...s, quantite: e.target.value }))}
+                        className={`${champ} text-[17px]`}
+                      />
+                    </label>
 
-                  {ouvert && (
-                    <div className="rounded-md p-4 flex flex-col gap-4" style={{ background: "#F0EEE7" }}>
-                      <p className="text-sm font-medium">Entrée de stock : {p.nom}</p>
-                      <label className="flex flex-col gap-1.5 w-40">
-                        <span className="text-sm font-medium">Quantité reçue</span>
+                    <ChampsPrix saisie={prixEntree} onChange={setPrixEntree} />
+
+                    <div className="flex flex-wrap items-end gap-3">
+                      <label className="flex flex-col gap-1.5 w-44">
+                        <span className="text-sm font-semibold">
+                          N° de lot <span className="font-normal" style={{ color: "var(--couleur-texte-2)" }}>facultatif</span>
+                        </span>
                         <input
-                          autoFocus
-                          required
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={saisieEntree.quantite}
-                          onChange={(e) => setSaisieEntree((s) => ({ ...s, quantite: e.target.value }))}
+                          value={saisieEntree.lot}
+                          onChange={(e) => setSaisieEntree((s) => ({ ...s, lot: e.target.value }))}
                           className={champ}
-                          style={bordure}
                         />
                       </label>
-
-                      <ChampsPrix saisie={prixEntree} onChange={setPrixEntree} />
-
-                      <div className="flex flex-wrap items-end gap-3">
-                        <label className="flex flex-col gap-1.5 w-40">
-                          <span className="text-sm font-medium">N° de lot (optionnel)</span>
-                          <input
-                            value={saisieEntree.lot}
-                            onChange={(e) => setSaisieEntree((s) => ({ ...s, lot: e.target.value }))}
-                            className={champ}
-                            style={bordure}
-                          />
-                        </label>
-                        <label className="flex flex-col gap-1.5">
-                          <span className="text-sm font-medium">Péremption (optionnel)</span>
-                          <input
-                            type="date"
-                            value={saisieEntree.peremption}
-                            onChange={(e) => setSaisieEntree((s) => ({ ...s, peremption: e.target.value }))}
-                            className={champ}
-                            style={bordure}
-                          />
-                        </label>
-                        <button
-                          onClick={() => validerEntree(p)}
-                          disabled={entreeEnCours}
-                          className="h-10 px-5 rounded-md text-white text-sm font-medium disabled:opacity-60"
-                          style={{ background: "var(--couleur-marque)" }}
-                        >
-                          {entreeEnCours ? "Enregistrement…" : "Valider l'entrée"}
-                        </button>
-                        <button
-                          onClick={() => setEntreeOuvertePour(null)}
-                          className="h-10 px-3 text-sm"
-                          style={{ color: "#6B6858" }}
-                        >
-                          Annuler
-                        </button>
-                      </div>
+                      <label className="flex flex-col gap-1.5">
+                        <span className="text-sm font-semibold">
+                          Péremption <span className="font-normal" style={{ color: "var(--couleur-texte-2)" }}>facultatif</span>
+                        </span>
+                        <input
+                          type="date"
+                          value={saisieEntree.peremption}
+                          onChange={(e) => setSaisieEntree((s) => ({ ...s, peremption: e.target.value }))}
+                          className={champ}
+                        />
+                      </label>
+                      <button onClick={() => validerEntree(p)} disabled={entreeEnCours} className="bouton bouton-accent h-[46px]">
+                        {entreeEnCours ? "Enregistrement…" : "Enregistrer l'entrée"}
+                      </button>
+                      <button
+                        onClick={() => setEntreeOuvertePour(null)}
+                        className="h-[46px] px-3 text-sm font-semibold"
+                        style={{ color: "var(--couleur-texte-2)" }}
+                      >
+                        Annuler
+                      </button>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {produitsFiltres.length > nbAffiches && (
-            <button
-              type="button"
-              onClick={() => setNbAffiches((n) => n + TRANCHE_AFFICHAGE)}
-              className="mt-4 h-10 px-4 rounded-md border text-sm font-medium bg-white"
-              style={{ ...bordure, color: "var(--couleur-marque)" }}
-            >
-              Afficher {Math.min(TRANCHE_AFFICHAGE, produitsFiltres.length - nbAffiches)} articles de plus
-              (encore {produitsFiltres.length - nbAffiches})
-            </button>
-          )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </section>
+
+        {produitsFiltres.length > nbAffiches && (
+          <button
+            type="button"
+            onClick={() => setNbAffiches((n) => n + TRANCHE_AFFICHAGE)}
+            className="bouton bouton-secondaire self-center"
+          >
+            Afficher {Math.min(TRANCHE_AFFICHAGE, produitsFiltres.length - nbAffiches)} articles de plus
+            (encore {produitsFiltres.length - nbAffiches})
+          </button>
+        )}
       </div>
     </main>
   );

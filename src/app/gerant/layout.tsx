@@ -5,9 +5,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { creerClientSupabase } from "@/lib/supabase/client";
 import { chargerProfilConnecte, oublierProfilConnecte } from "@/lib/profil";
-import VersionApp from "@/components/VersionApp";
 import BoutonRafraichir from "@/components/BoutonRafraichir";
+import Icone, { type NomIcone } from "@/components/Icone";
+import Logo from "@/components/Logo";
 import { LIBELLES_ROLE, PAGES_GESTION, estRole, peutUtiliserCaisse, type Role } from "@/lib/roles";
+
+const ICONES: Record<string, NomIcone> = {
+  "/gerant": "tableau",
+  "/gerant/produits": "produits",
+  "/gerant/fournisseurs": "fournisseurs",
+  "/gerant/employes": "employes",
+};
+
+function initiales(nom: string) {
+  return nom
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((m) => m[0]?.toUpperCase())
+    .join("");
+}
 
 function BoutonsBasDeMenu({ role, onNaviguer }: { role: Role | null; onNaviguer?: () => void }) {
   return (
@@ -16,13 +33,16 @@ function BoutonsBasDeMenu({ role, onNaviguer }: { role: Role | null; onNaviguer?
         <Link
           href="/caisse"
           onClick={onNaviguer}
-          className="px-3 py-2 rounded-md text-sm font-semibold"
-          style={{ color: "var(--couleur-accent)" }}
+          className="bouton bouton-accent justify-start mb-1"
         >
-          Caisse →
+          <Icone nom="caisse" />
+          Ouvrir la caisse
         </Link>
       )}
-      <BoutonRafraichir className="px-3 py-2 rounded-md text-sm text-left" />
+      <BoutonRafraichir
+        className="h-10 px-3 rounded-[10px] text-sm text-left hover:bg-[var(--couleur-marque-claire)]"
+        couleur="var(--couleur-sur-marque)"
+      />
       <button
         onClick={async () => {
           const supabase = creerClientSupabase();
@@ -30,11 +50,48 @@ function BoutonsBasDeMenu({ role, onNaviguer }: { role: Role | null; onNaviguer?
           oublierProfilConnecte();
           window.location.href = "/";
         }}
-        className="px-3 py-2 rounded-md text-sm text-left"
-        style={{ color: "#6B6858" }}
+        className="h-10 px-3 rounded-[10px] text-sm text-left inline-flex items-center gap-2 hover:bg-[var(--couleur-marque-claire)]"
+        style={{ color: "var(--couleur-sur-marque)" }}
       >
+        <Icone nom="sortie" taille={18} />
         Déconnexion
       </button>
+    </>
+  );
+}
+
+function LiensMenu({
+  liens,
+  pathname,
+  onNaviguer,
+}: {
+  liens: typeof PAGES_GESTION;
+  pathname: string;
+  onNaviguer?: () => void;
+}) {
+  return (
+    <>
+      {liens.map((lien) => {
+        const actif = pathname === lien.href;
+        return (
+          <Link
+            key={lien.href}
+            href={lien.href}
+            onClick={onNaviguer}
+            aria-current={actif ? "page" : undefined}
+            className={`flex items-center gap-3 h-11 px-3 rounded-[10px] text-[15px] transition-colors ${
+              actif ? "font-semibold" : "font-medium hover:bg-[var(--couleur-marque-claire)]"
+            }`}
+            style={{
+              background: actif ? "#FFFFFF" : undefined,
+              color: actif ? "var(--couleur-marque)" : "var(--couleur-sur-marque)",
+            }}
+          >
+            <Icone nom={ICONES[lien.href] ?? "tableau"} />
+            {lien.label}
+          </Link>
+        );
+      })}
     </>
   );
 }
@@ -59,88 +116,69 @@ export default function LayoutGerant({ children }: { children: React.ReactNode }
 
   const liens = role ? PAGES_GESTION.filter((p) => p.roles.includes(role)) : [];
 
-  const lienStyle = (actif: boolean) => ({
-    background: actif ? "var(--couleur-marque)" : "transparent",
-    color: actif ? "white" : "var(--couleur-texte)",
-  });
+  const blocUtilisateur = role && (
+    <div className="flex items-center gap-3 px-2.5 pb-3">
+      <span
+        aria-hidden
+        className="w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold shrink-0"
+        style={{ background: "var(--couleur-menthe)", color: "var(--couleur-marque)" }}
+      >
+        {initiales(nomUtilisateur)}
+      </span>
+      <p className="flex flex-col text-sm font-semibold leading-snug text-white min-w-0">
+        <span className="truncate">{nomUtilisateur}</span>
+        <span className="text-xs font-medium" style={{ color: "var(--couleur-sur-marque-2)" }}>
+          {LIBELLES_ROLE[role]}
+        </span>
+      </p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row" style={{ background: "var(--couleur-fond)" }}>
-      {/* Barre du haut — visible uniquement sur petit écran (tablette/mobile) */}
-      <div
-        className="md:hidden flex items-center justify-between h-14 px-4 border-b"
-        style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
-      >
-        <p className="police-titre font-semibold" style={{ color: "var(--couleur-marque)" }}>
-          SOURA Marché
-          <VersionApp />
-        </p>
+      {/* Barre du haut — petit écran (tablette/mobile) */}
+      <div className="md:hidden flex items-center justify-between h-16 px-4" style={{ background: "var(--couleur-marque)" }}>
+        <Logo surFonce />
         <button
           aria-label={menuOuvert ? "Fermer le menu" : "Ouvrir le menu"}
+          aria-expanded={menuOuvert}
           onClick={() => setMenuOuvert((v) => !v)}
-          className="text-2xl leading-none px-2"
-          style={{ color: "var(--couleur-marque)" }}
+          className="w-11 h-11 flex items-center justify-center rounded-[10px] text-white"
         >
-          {menuOuvert ? "✕" : "☰"}
+          <Icone nom={menuOuvert ? "fermer" : "menu"} taille={24} />
         </button>
       </div>
 
-      {/* Menu déroulant plein écran sur mobile */}
+      {/* Menu déroulant sur mobile */}
       {menuOuvert && (
         <nav
-          className="md:hidden flex flex-col border-b"
-          style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
+          aria-label="Menu de gestion"
+          className="md:hidden flex flex-col gap-1 px-3 pb-4"
+          style={{ background: "var(--couleur-marque)" }}
         >
-          {liens.map((lien) => (
-            <Link
-              key={lien.href}
-              href={lien.href}
-              onClick={() => setMenuOuvert(false)}
-              className="px-4 py-3 text-sm font-medium border-b"
-              style={{ ...lienStyle(pathname === lien.href), borderColor: "var(--couleur-bordure)" }}
-            >
-              {lien.label}
-            </Link>
-          ))}
-          <div className="flex flex-col px-1 py-2">
+          <LiensMenu liens={liens} pathname={pathname} onNaviguer={() => setMenuOuvert(false)} />
+          <div className="flex flex-col gap-1 pt-3 mt-2 border-t" style={{ borderColor: "var(--couleur-marque-trait)" }}>
+            {blocUtilisateur}
             <BoutonsBasDeMenu role={role} onNaviguer={() => setMenuOuvert(false)} />
           </div>
         </nav>
       )}
 
-      {/* Barre latérale — visible uniquement à partir de md (tablette large / ordinateur) */}
+      {/* Barre latérale — à partir des tablettes larges */}
       <aside
-        className="hidden md:flex w-60 shrink-0 flex-col border-r"
-        style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
+        className="hidden md:flex w-[272px] shrink-0 flex-col px-3.5 py-5 sticky top-0 h-screen"
+        style={{ background: "var(--couleur-marque)" }}
       >
-        <div className="h-16 px-5 flex items-center border-b" style={{ borderColor: "var(--couleur-bordure)" }}>
-          <p className="police-titre font-semibold" style={{ color: "var(--couleur-marque)" }}>
-            SOURA Marché
-            <VersionApp />
-          </p>
+        <div className="px-2.5 pb-6">
+          <Logo surFonce />
         </div>
 
-        <nav className="flex-1 py-4 px-3 flex flex-col gap-1">
-          {liens.map((lien) => (
-            <Link
-              key={lien.href}
-              href={lien.href}
-              className="px-3 py-2 rounded-md text-sm font-medium transition-colors"
-              style={lienStyle(pathname === lien.href)}
-            >
-              {lien.label}
-            </Link>
-          ))}
+        <nav aria-label="Menu de gestion" className="flex-1 flex flex-col gap-1">
+          <LiensMenu liens={liens} pathname={pathname} />
         </nav>
 
-        <div className="p-3 border-t flex flex-col gap-1" style={{ borderColor: "var(--couleur-bordure)" }}>
-          {role && (
-            <p className="px-3 pb-2 text-xs leading-snug" style={{ color: "#6B6858" }}>
-              {nomUtilisateur}
-              <br />
-              {LIBELLES_ROLE[role]}
-            </p>
-          )}
+        <div className="pt-5 flex flex-col gap-1 border-t" style={{ borderColor: "var(--couleur-marque-trait)" }}>
+          {blocUtilisateur}
           <BoutonsBasDeMenu role={role} />
         </div>
       </aside>

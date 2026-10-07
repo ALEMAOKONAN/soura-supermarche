@@ -1,26 +1,34 @@
 @import "tailwindcss";
 
 /*
-  Remarque environnement : les polices Manrope/Inter sont chargées ici via une
-  pile de secours système (le bac à sable de build n'a pas accès à Google
-  Fonts). Sur Vercel, remplacez ces déclarations par next/font/google pour
-  charger les polices réelles — la mise en page ne change pas.
+  Charte SOURA Marché — « vert forêt, orange marché »
+  - vert forêt : marque, menus, actions principales
+  - orange marché : UNE action par écran (encaisser, enregistrer)
+  - chiffres à largeur fixe partout : les colonnes de prix restent alignées
 */
 
 :root {
-  --couleur-fond: #F7F5F0;
-  --couleur-texte: #1A1A1A;
-  --couleur-marque: #0F3D2E;
-  --couleur-marque-claire: #17573F;
-  --couleur-accent: #E8622C;
-  --couleur-accent-sombre: #C94F1E;
-  --couleur-bordure: #DCD8CE;
+  --couleur-fond: #F3F5F1;
+  --couleur-texte: #16201B;
+  --couleur-texte-2: #4D5A53;
+  --couleur-texte-3: #66736B;
+  --couleur-marque: #0B3B2C;
+  --couleur-marque-claire: #14583F;
+  --couleur-marque-trait: #2C6B53;
+  --couleur-sur-marque: #D7E4DD;
+  --couleur-sur-marque-2: #B9CEC4;
+  --couleur-menthe: #E3EFE8;
+  --couleur-accent: #C4491B;
+  --couleur-accent-sombre: #A63D16;
+  --couleur-bordure: #DDE3DC;
+  --couleur-bordure-forte: #C9D2CA;
+  --couleur-ligne: #EDF0EB;
   --couleur-surface: #FFFFFF;
-  --couleur-danger: #B3261E;
-  --couleur-succes: #1F7A4D;
+  --couleur-danger: #B42318;
+  --couleur-succes: #1A6B43;
 
-  --police-titre: "Manrope", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --police-texte: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --police-titre: "Bricolage Grotesque Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --police-texte: "Figtree Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
@@ -36,6 +44,83 @@ body {
   color: var(--couleur-texte);
   font-family: var(--police-texte);
   -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+input, select, textarea, button {
+  font-family: inherit;
+}
+
+/* --- Composants communs -------------------------------------------------- */
+
+/* Carte blanche des écrans de gestion */
+.carte {
+  background: var(--couleur-surface);
+  border: 1px solid var(--couleur-bordure);
+  border-radius: 16px;
+}
+
+/* Champs de saisie */
+.champ {
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--couleur-bordure-forte);
+  background: var(--couleur-surface);
+  font-size: 15px;
+  color: var(--couleur-texte);
+  outline: none;
+}
+.champ:focus-visible { outline: none; }
+.champ:focus {
+  border-color: var(--couleur-marque);
+  box-shadow: 0 0 0 3px var(--couleur-menthe);
+}
+
+/* Boutons */
+.bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+.bouton:disabled { opacity: 0.5; cursor: not-allowed; }
+.bouton-principal { background: var(--couleur-marque); color: #FFFFFF; border: 0; }
+.bouton-principal:hover:not(:disabled) { background: var(--couleur-marque-claire); }
+.bouton-accent { background: var(--couleur-accent); color: #FFFFFF; border: 0; }
+.bouton-accent:hover:not(:disabled) { background: var(--couleur-accent-sombre); }
+.bouton-secondaire { background: var(--couleur-surface); color: var(--couleur-marque); border: 1px solid var(--couleur-marque); }
+.bouton-secondaire:hover:not(:disabled) { background: var(--couleur-menthe); }
+
+/* Pastilles d'état */
+.pastille {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pastille-ok { background: #E3F3EA; color: var(--couleur-succes); }
+.pastille-bas { background: #FEF3C7; color: #7A4B05; }
+.pastille-rupture { background: #FDE3E1; color: #9B1C14; }
+.pastille-neutre { background: var(--couleur-ligne); color: var(--couleur-texte-2); }
+
+/* Titres de section */
+.titre-section {
+  font-family: var(--police-titre);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--couleur-texte);
 }
 
 h1, h2, h3, h4, .police-titre {
@@ -54,3 +139,6 @@ h1, h2, h3, h4, .police-titre {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Champ intégré dans un cadre qui montre déjà le focus (barre de scan, recherche) */
+.champ-nu:focus-visible { outline: none; }

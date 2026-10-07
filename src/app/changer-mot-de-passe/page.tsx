@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Logo from "@/components/Logo";
 import { creerClientSupabase } from "@/lib/supabase/client";
 
 export default function PageChangerMotDePasse() {
@@ -53,24 +54,21 @@ export default function PageChangerMotDePasse() {
     window.location.href = "/";
   }
 
-  const champStyle = { borderColor: "var(--couleur-bordure)" };
 
   return (
     <main className="min-h-screen flex items-center justify-center p-6" style={{ background: "var(--couleur-fond)" }}>
-      <div className="w-full max-w-sm">
-        <p className="police-titre text-xl font-bold mb-10" style={{ color: "var(--couleur-marque)" }}>
-          SOURA Marché
-        </p>
-
-        <h1 className="police-titre text-2xl font-semibold mb-1">Choisissez votre mot de passe</h1>
-        <p className="text-sm mb-8" style={{ color: "#6B6858" }}>
+      <div className="w-full max-w-[440px] flex flex-col gap-8">
+        <Logo />
+        <div className="carte p-6 md:p-8">
+        <h1 className="police-titre text-[26px] font-bold tracking-tight mb-1.5">Choisissez votre mot de passe</h1>
+        <p className="text-[15px] leading-relaxed mb-7" style={{ color: "var(--couleur-texte-2)" }}>
           Le mot de passe qui vous a été communiqué est provisoire. Pour votre sécurité, remplacez-le par un mot de
           passe que vous seul connaissez.
         </p>
 
         <form onSubmit={enregistrer} className="flex flex-col gap-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">Nouveau mot de passe</span>
+            <span className="text-[15px] font-semibold">Nouveau mot de passe</span>
             <input
               type={afficher ? "text" : "password"}
               required
@@ -78,24 +76,22 @@ export default function PageChangerMotDePasse() {
               autoComplete="new-password"
               value={motDePasse}
               onChange={(e) => setMotDePasse(e.target.value)}
-              className="h-11 px-3 rounded-md border bg-white text-sm outline-none focus:border-[var(--couleur-marque)]"
-              style={champStyle}
+              className="champ h-[52px] text-[17px]"
             />
-            <span className="text-xs" style={{ color: assezLong ? "var(--couleur-succes)" : "#8A8676" }}>
+            <span className="text-xs" style={{ color: assezLong ? "var(--couleur-succes)" : "var(--couleur-texte-3)" }}>
               {assezLong ? "✓ " : ""}8 caractères minimum, différent du mot de passe provisoire
             </span>
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">Confirmez le mot de passe</span>
+            <span className="text-[15px] font-semibold">Confirmez le mot de passe</span>
             <input
               type={afficher ? "text" : "password"}
               required
               autoComplete="new-password"
               value={confirmation}
               onChange={(e) => setConfirmation(e.target.value)}
-              className="h-11 px-3 rounded-md border bg-white text-sm outline-none focus:border-[var(--couleur-marque)]"
-              style={champStyle}
+              className="champ h-[52px] text-[17px]"
             />
             {confirmation.length > 0 && (
               <span className="text-xs" style={{ color: identiques ? "var(--couleur-succes)" : "var(--couleur-danger)" }}>
@@ -112,8 +108,8 @@ export default function PageChangerMotDePasse() {
           {erreur && (
             <p
               role="alert"
-              className="text-sm rounded-md px-3 py-2"
-              style={{ background: "#FBEAE8", color: "var(--couleur-danger)" }}
+              className="text-sm rounded-[10px] px-3.5 py-2.5"
+              style={{ background: "#FDE3E1", color: "var(--couleur-danger)" }}
             >
               {erreur}
             </p>
@@ -122,16 +118,16 @@ export default function PageChangerMotDePasse() {
           <button
             type="submit"
             disabled={enCours}
-            className="h-11 rounded-md font-medium text-white transition-opacity disabled:opacity-60 mt-2"
-            style={{ background: "var(--couleur-marque)" }}
+            className="bouton bouton-principal h-14 text-lg police-titre font-bold mt-2"
           >
             {enCours ? "Enregistrement…" : "Enregistrer et continuer"}
           </button>
 
-          <button type="button" onClick={seDeconnecter} className="text-sm self-center" style={{ color: "#6B6858" }}>
+          <button type="button" onClick={seDeconnecter} className="text-sm self-center" style={{ color: "var(--couleur-texte-2)" }}>
             Se déconnecter
           </button>
         </form>
+        </div>
       </div>
     </main>
   );

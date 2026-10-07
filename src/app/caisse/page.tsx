@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
-import VersionApp from "@/components/VersionApp";
+import Icone from "@/components/Icone";
+import Logo from "@/components/Logo";
 import BoutonRafraichir from "@/components/BoutonRafraichir";
 import {
   ajouterAFile,
@@ -60,12 +61,57 @@ const MODES_PAIEMENT = [
 
 const formateurFCFA = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
 
+// Montants que le client tend le plus souvent : le compte exact, puis les
+// montants ronds juste au-dessus du total (1 000, 5 000, 10 000…).
+function montantsProposes(total: number): number[] {
+  if (total <= 0) return [];
+  const montants = [total];
+  for (const pas of [1000, 5000, 10000]) {
+    const m = Math.ceil(total / pas) * pas;
+    if (!montants.includes(m)) montants.push(m);
+  }
+  let suivant = Math.ceil(total / 10000) * 10000;
+  while (montants.length < 4) {
+    suivant += 10000;
+    montants.push(suivant);
+  }
+  return montants.slice(0, 4);
+}
+
+// Articles en tuiles, faciles à toucher sur un écran tactile.
+function TuilesArticles({ produits, onChoisir }: { produits: Produit[]; onChoisir: (p: Produit) => void }) {
+  return (
+    <ul className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
+      {produits.map((p) => (
+        <li key={p.id}>
+          <button
+            onClick={() => onChoisir(p)}
+            className="w-full h-full min-h-[120px] flex flex-col gap-2 p-3.5 rounded-[14px] border bg-white text-left transition-colors hover:border-[var(--couleur-marque)] hover:bg-[#F7FAF8]"
+            style={{ borderColor: "var(--couleur-bordure)" }}
+          >
+            <span className="text-[15px] font-semibold leading-snug">{p.nom}</span>
+            {p.est_pese && (
+              <span className="pastille pastille-neutre self-start text-xs">au poids</span>
+            )}
+            <span className="mt-auto police-titre text-xl font-bold" style={{ color: "var(--couleur-marque)" }}>
+              {formateurFCFA.format(p.prix_vente)} F
+              {p.est_pese && <span className="text-sm font-semibold"> /kg</span>}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function PageCaisse() {
   const supabase = useMemo(() => creerClientSupabase(), []);
 
   const [recherche, setRecherche] = useState("");
   const [resultats, setResultats] = useState<Produit[]>([]);
   const [panier, setPanier] = useState<LignePanier[]>([]);
+  // Derniers articles ajoutés (pour les reprendre d'un geste)
+  const [recents, setRecents] = useState<Produit[]>([]);
   // Texte tapé dans le champ quantité d'une ligne du ticket, tant qu'il
   // n'a pas été validé (permet d'effacer/retaper sans que la ligne saute).
   const [quantiteSaisie, setQuantiteSaisie] = useState<Record<string, string>>({});
@@ -276,6 +322,7 @@ export default function PageCaisse() {
       }
       return [...actuel, { produit, quantite: 1 }];
     });
+    setRecents((actuels) => [produit, ...actuels.filter((p) => p.id !== produit.id)].slice(0, 12));
     setRecherche("");
     setResultats([]);
   }
@@ -463,18 +510,55 @@ export default function PageCaisse() {
     <main className="min-h-screen flex flex-col print:hidden" style={{ background: "var(--couleur-fond)" }}>
       {/* En-tête */}
       <header
-        className="flex items-center justify-between px-6 h-16 border-b"
-        style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
+        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 md:px-6 py-3"
+        style={{ background: "var(--couleur-marque)" }}
       >
-        <p className="police-titre font-semibold" style={{ color: "var(--couleur-marque)" }}>
-          SOURA Marché · Caisse
-          <VersionApp />
-        </p>
-        <div className="flex items-center gap-5 text-sm">
-          <p style={{ color: "#6B6858" }}>
+        <div className="flex items-center gap-4 min-w-0">
+          <Logo surFonce suffixe="Caisse" />
+          {infosMagasin && (
+            <p className="hidden lg:block text-sm truncate" style={{ color: "var(--couleur-sur-marque-2)" }}>
+              {infosMagasin.nomMagasin}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5 text-sm">
+          <span
+            role="status"
+            className="inline-flex items-center gap-2 h-8 px-3 rounded-full font-semibold"
+            style={{
+              background: enLigne ? "var(--couleur-marque-claire)" : "#FEF3C7",
+              color: enLigne ? "#FFFFFF" : "#7A4B05",
+            }}
+          >
+            <span className="w-2 h-2 rounded-full" style={{ background: enLigne ? "#6FE0A6" : "#B45309" }} />
+            {enLigne ? "En ligne" : "Hors ligne"}
+          </span>
+          <p className="hidden md:block px-1.5" style={{ color: "var(--couleur-sur-marque)" }}>
             {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
           </p>
+          {infosMagasin?.nomCaissier && (
+            <span
+              className="hidden sm:inline-flex items-center gap-2 h-10 pl-1.5 pr-3.5 rounded-full font-semibold text-white"
+              style={{ background: "var(--couleur-marque-claire)" }}
+            >
+              <span
+                aria-hidden
+                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+                style={{ background: "var(--couleur-menthe)", color: "var(--couleur-marque)" }}
+              >
+                {infosMagasin.nomCaissier
+                  .split(/\s+/)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((m) => m[0]?.toUpperCase())
+                  .join("")}
+              </span>
+              {infosMagasin.nomCaissier}
+            </span>
+          )}
           <BoutonRafraichir
+            className="h-10 px-3 rounded-[10px] border font-medium"
+            couleur="#FFFFFF"
             confirmation={() =>
               panier.length > 0
                 ? "Un ticket est en cours : les articles scannés seront perdus. Actualiser quand même ?"
@@ -482,8 +566,12 @@ export default function PageCaisse() {
             }
           />
           {roleUtilisateur && roleUtilisateur !== "caissier" && (
-            <Link href="/gerant" style={{ color: "var(--couleur-marque)" }}>
-              Gestion →
+            <Link
+              href="/gerant"
+              className="inline-flex items-center h-10 px-4 rounded-[10px] font-semibold"
+              style={{ background: "#FFFFFF", color: "var(--couleur-marque)" }}
+            >
+              Gestion
             </Link>
           )}
           <button
@@ -491,8 +579,10 @@ export default function PageCaisse() {
               await supabase.auth.signOut();
               window.location.href = "/";
             }}
-            style={{ color: "var(--couleur-marque)" }}
+            className="inline-flex items-center gap-2 h-10 px-3 rounded-[10px] font-medium"
+            style={{ color: "var(--couleur-sur-marque)" }}
           >
+            <Icone nom="sortie" taille={18} />
             Déconnexion
           </button>
         </div>
@@ -502,8 +592,8 @@ export default function PageCaisse() {
       {!enLigne && (
         <div
           role="status"
-          className="px-6 py-2 text-sm font-medium"
-          style={{ background: "#FFF4EC", color: "var(--couleur-accent-sombre)", borderBottom: "1px solid #F0C9A8" }}
+          className="px-6 py-2.5 text-sm font-medium"
+          style={{ background: "#FEF3C7", color: "#7A4B05", borderBottom: "1px solid #F5D48A" }}
         >
           Mode hors ligne : vous pouvez continuer à encaisser. Les ventes sont gardées sur ce poste
           et seront envoyées dès le retour de la connexion.
@@ -513,8 +603,8 @@ export default function PageCaisse() {
       {enLigne && fileAttente.length > 0 && (
         <div
           role="status"
-          className="px-6 py-2 text-sm flex items-center justify-between gap-3"
-          style={{ background: "#FFF4EC", color: "var(--couleur-accent-sombre)", borderBottom: "1px solid #F0C9A8" }}
+          className="px-6 py-2.5 text-sm flex items-center justify-between gap-3"
+          style={{ background: "#FEF3C7", color: "#7A4B05", borderBottom: "1px solid #F5D48A" }}
         >
           <span>
             {synchroEnCours
@@ -526,147 +616,268 @@ export default function PageCaisse() {
                 : `${fileAttente.length} vente(s) hors ligne en attente d'envoi.`}
           </span>
           {!synchroEnCours && (
-            <button onClick={synchroniser} className="shrink-0 underline font-medium">
+            <button onClick={synchroniser} className="shrink-0 underline font-semibold">
               Envoyer maintenant
             </button>
           )}
         </div>
       )}
 
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-[1fr_360px]">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_380px] lg:grid-cols-[minmax(0,1fr)_420px]">
         {/* Recherche / scan produit */}
-        <section className="p-6 flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">Scanner ou rechercher un article</span>
+        <section className="p-4 md:p-6 flex flex-col gap-5 min-w-0">
+          <label
+            className="flex items-center gap-3.5 h-16 px-5 rounded-[14px] border-2 bg-white focus-within:shadow-[0_0_0_4px_var(--couleur-menthe)]"
+            style={{ borderColor: "var(--couleur-marque)" }}
+          >
+            <span style={{ color: "var(--couleur-marque)" }}>
+              <Icone nom="codeBarre" taille={26} />
+            </span>
+            <span className="sr-only">Scanner ou rechercher un article</span>
             <input
               autoFocus
               value={recherche}
               onChange={(e) => setRecherche(e.target.value)}
-              placeholder="Nom de l'article ou code-barres…"
-              className="h-14 px-4 rounded-md border bg-white text-lg outline-none focus:border-[var(--couleur-marque)]"
-              style={{ borderColor: "var(--couleur-bordure)" }}
+              placeholder="Scannez un code-barres ou tapez le nom d'un article…"
+              className="champ-nu flex-1 min-w-0 bg-transparent text-lg md:text-xl outline-none"
             />
           </label>
 
           {resultats.length > 0 && (
-            <ul className="flex flex-col rounded-md border overflow-hidden" style={{ borderColor: "var(--couleur-bordure)" }}>
-              {resultats.map((p) => (
-                <li key={p.id}>
-                  <button
-                    onClick={() => ajouterAuPanier(p)}
-                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-[#F0EEE7] transition-colors border-b last:border-b-0"
-                    style={{ borderColor: "var(--couleur-bordure)" }}
-                  >
-                    <span>
-                      <span className="font-medium">{p.nom}</span>
-                      {p.est_pese && <span className="text-xs ml-2" style={{ color: "#6B6858" }}>vendu au poids</span>}
-                    </span>
-                    <span className="police-titre font-semibold">
-                      {formateurFCFA.format(p.prix_vente)} F
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <div className="flex flex-col gap-3">
+              <h2 className="text-sm font-semibold" style={{ color: "var(--couleur-texte-2)" }}>
+                {resultats.length} article{resultats.length > 1 ? "s" : ""} trouvé{resultats.length > 1 ? "s" : ""}
+              </h2>
+              <TuilesArticles produits={resultats} onChoisir={ajouterAuPanier} />
+            </div>
           )}
 
-          {panier.length === 0 && resultats.length === 0 && (
-            <p className="text-sm mt-8" style={{ color: "#8A8676" }}>
-              Le ticket est vide. Recherchez un article pour commencer.
-            </p>
+          {resultats.length === 0 && recents.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <h2 className="text-sm font-semibold" style={{ color: "var(--couleur-texte-2)" }}>
+                Ajoutés récemment
+              </h2>
+              <TuilesArticles produits={recents} onChoisir={ajouterAuPanier} />
+            </div>
           )}
 
+          {resultats.length === 0 && recents.length === 0 && (
+            <div
+              className="mt-2 rounded-2xl border border-dashed px-6 py-12 flex flex-col items-center text-center gap-3"
+              style={{ borderColor: "var(--couleur-bordure-forte)", color: "var(--couleur-texte-2)" }}
+            >
+              <span style={{ color: "var(--couleur-marque)" }}>
+                <Icone nom="codeBarre" taille={40} />
+              </span>
+              <p className="police-titre text-xl font-bold" style={{ color: "var(--couleur-texte)" }}>
+                Prêt à encaisser
+              </p>
+              <p className="text-[15px] max-w-sm">
+                Scannez le premier article, ou tapez au moins deux lettres de son nom.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Ticket en cours */}
         <aside
-          className="border-t md:border-t-0 md:border-l flex flex-col"
+          className="border-t md:border-t-0 md:border-l flex flex-col min-w-0"
           style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
         >
-          <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <h2 className="police-titre font-semibold text-sm uppercase tracking-wide" style={{ color: "#6B6858" }}>
-                Ticket en cours
-              </h2>
-              {panier.length > 0 && (
-                <button
-                  onClick={viderTicket}
-                  className="text-xs"
-                  style={{ color: "var(--couleur-danger)" }}
-                >
-                  Vider le ticket
-                </button>
-              )}
+          <div className="flex items-center justify-between px-5 md:px-6 py-4 border-b" style={{ borderColor: "var(--couleur-bordure)" }}>
+            <div>
+              <h2 className="police-titre text-xl font-bold">Ticket en cours</h2>
+              <p className="text-[13px]" style={{ color: "var(--couleur-texte-2)" }}>
+                {panier.length === 0 ? "Aucun article" : `${panier.length} article${panier.length > 1 ? "s" : ""}`}
+              </p>
             </div>
+            {panier.length > 0 && (
+              <button
+                onClick={viderTicket}
+                className="h-10 px-3 text-sm font-semibold rounded-[10px]"
+                style={{ color: "var(--couleur-danger)" }}
+              >
+                Vider
+              </button>
+            )}
+          </div>
 
+          <div className="flex-1 overflow-y-auto px-5 md:px-6 py-1 flex flex-col">
+            {panier.length === 0 && (
+              <p className="py-12 text-center text-[15px]" style={{ color: "var(--couleur-texte-2)" }}>
+                Le ticket est vide.
+              </p>
+            )}
             {panier.map((l) => (
-              <div key={l.produit.id} className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{l.produit.nom}</p>
-                  <p className="text-xs" style={{ color: "#8A8676" }}>
-                    {formateurFCFA.format(l.produit.prix_vente)} F × {l.quantite}
-                  </p>
+              <div
+                key={l.produit.id}
+                className="flex flex-col gap-1.5 py-3 border-b"
+                style={{ borderColor: "var(--couleur-ligne)" }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-[15px] font-semibold leading-snug">{l.produit.nom}</p>
+                  <span className="text-[15px] font-bold whitespace-nowrap">
+                    {formateurFCFA.format(l.quantite * l.produit.prix_vente)} F
+                  </span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    aria-label={`Retirer un ${l.produit.nom}`}
-                    onClick={() => modifierQuantite(l.produit.id, l.quantite - 1)}
-                    className="w-9 h-9 rounded-full border flex items-center justify-center"
-                    style={{ borderColor: "var(--couleur-bordure)" }}
-                  >
-                    −
-                  </button>
-                  <input
-                    type="number"
-                    min={0}
-                    step={l.produit.est_pese ? "0.001" : "1"}
-                    inputMode="decimal"
-                    aria-label={`Quantité de ${l.produit.nom}`}
-                    value={quantiteSaisie[l.produit.id] ?? String(l.quantite)}
-                    onChange={(e) =>
-                      setQuantiteSaisie((actuel) => ({ ...actuel, [l.produit.id]: e.target.value }))
-                    }
-                    onBlur={(e) => {
-                      const valeur = Number(e.target.value);
-                      modifierQuantite(l.produit.id, Number.isFinite(valeur) ? valeur : l.quantite);
-                      setQuantiteSaisie((actuel) => {
-                        const copie = { ...actuel };
-                        delete copie[l.produit.id];
-                        return copie;
-                      });
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") e.currentTarget.blur();
-                    }}
-                    className="w-16 h-9 text-center text-sm rounded-md border"
-                    style={{ borderColor: "var(--couleur-bordure)" }}
-                  />
-                  <button
-                    aria-label={`Ajouter un ${l.produit.nom}`}
-                    onClick={() => modifierQuantite(l.produit.id, l.quantite + 1)}
-                    className="w-9 h-9 rounded-full border flex items-center justify-center"
-                    style={{ borderColor: "var(--couleur-bordure)" }}
-                  >
-                    +
-                  </button>
-                  <button
-                    aria-label={`Supprimer ${l.produit.nom} du ticket`}
-                    onClick={() => supprimerLigne(l.produit.id)}
-                    className="w-9 h-9 rounded-full flex items-center justify-center ml-1"
-                    style={{ color: "var(--couleur-danger)" }}
-                  >
-                    ×
-                  </button>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[13px]" style={{ color: "var(--couleur-texte-2)" }}>
+                    {formateurFCFA.format(l.produit.prix_vente)} F {l.produit.est_pese ? "le kg" : "l’unité"}
+                  </p>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      aria-label={`Retirer un ${l.produit.nom}`}
+                      onClick={() => modifierQuantite(l.produit.id, l.quantite - 1)}
+                      className="w-9 h-9 rounded-full border flex items-center justify-center text-lg"
+                      style={{ borderColor: "var(--couleur-bordure)" }}
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min={0}
+                      step={l.produit.est_pese ? "0.001" : "1"}
+                      inputMode="decimal"
+                      aria-label={`Quantité de ${l.produit.nom}`}
+                      value={quantiteSaisie[l.produit.id] ?? String(l.quantite)}
+                      onChange={(e) =>
+                        setQuantiteSaisie((actuel) => ({ ...actuel, [l.produit.id]: e.target.value }))
+                      }
+                      onBlur={(e) => {
+                        const valeur = Number(e.target.value);
+                        modifierQuantite(l.produit.id, Number.isFinite(valeur) ? valeur : l.quantite);
+                        setQuantiteSaisie((actuel) => {
+                          const copie = { ...actuel };
+                          delete copie[l.produit.id];
+                          return copie;
+                        });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                      }}
+                      className="w-14 h-9 text-center text-[15px] font-bold rounded-lg border-0 bg-transparent focus:bg-[var(--couleur-menthe)] outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <button
+                      aria-label={`Ajouter un ${l.produit.nom}`}
+                      onClick={() => modifierQuantite(l.produit.id, l.quantite + 1)}
+                      className="w-9 h-9 rounded-full border flex items-center justify-center text-lg"
+                      style={{ borderColor: "var(--couleur-bordure)" }}
+                    >
+                      +
+                    </button>
+                    <button
+                      aria-label={`Supprimer ${l.produit.nom} du ticket`}
+                      onClick={() => supprimerLigne(l.produit.id)}
+                      className="w-9 h-9 ml-1 flex items-center justify-center rounded-full"
+                      style={{ color: "var(--couleur-danger)" }}
+                    >
+                      <Icone nom="fermer" taille={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
 
           {/* Paiement — toujours visible, jamais à faire défiler pour trouver "encaisser" */}
-          <div className="p-5 border-t flex flex-col gap-3" style={{ borderColor: "var(--couleur-bordure)" }}>
+          <div
+            className="px-5 md:px-6 pt-4 pb-5 border-t flex flex-col gap-3.5"
+            style={{ borderColor: "var(--couleur-bordure)", background: "#FAFBF9" }}
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[15px] font-semibold" style={{ color: "var(--couleur-texte-2)" }}>
+                Total à payer
+              </span>
+              <span className="police-titre text-[40px] leading-none font-bold tracking-tight" style={{ color: "var(--couleur-marque)" }}>
+                {formateurFCFA.format(total)} F
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {MODES_PAIEMENT.map((m) => {
+                const actif = modePaiement === m.valeur;
+                return (
+                  <button
+                    key={m.valeur}
+                    onClick={() => setModePaiement(m.valeur)}
+                    aria-pressed={actif}
+                    className="h-12 rounded-[10px] text-[15px] font-semibold border-2 transition-colors"
+                    style={{
+                      borderColor: actif ? "var(--couleur-marque)" : "var(--couleur-bordure)",
+                      background: actif ? "var(--couleur-menthe)" : "#FFFFFF",
+                      color: "var(--couleur-marque)",
+                    }}
+                  >
+                    {m.libelle}
+                  </button>
+                );
+              })}
+            </div>
+
+            {modePaiement === "especes" && (
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center justify-between gap-3">
+                  <span className="text-[13px] font-semibold" style={{ color: "var(--couleur-texte-2)" }}>
+                    Montant reçu
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    inputMode="numeric"
+                    value={montantRecu}
+                    onChange={(e) => setMontantRecu(e.target.value)}
+                    placeholder="0"
+                    className="champ w-36 h-11 text-right text-lg font-semibold"
+                  />
+                </label>
+                {total > 0 && (
+                  <div className="grid grid-cols-4 gap-2">
+                    {montantsProposes(total).map((m, i) => {
+                      const actif = montantRecu === String(m);
+                      return (
+                        <button
+                          key={m}
+                          onClick={() => setMontantRecu(String(m))}
+                          aria-pressed={actif}
+                          className="h-11 rounded-[10px] text-sm font-semibold border transition-colors"
+                          style={{
+                            borderColor: actif ? "var(--couleur-marque)" : "var(--couleur-bordure)",
+                            background: actif ? "var(--couleur-marque)" : "#FFFFFF",
+                            color: actif ? "#FFFFFF" : "var(--couleur-texte)",
+                          }}
+                        >
+                          {i === 0 ? "Exact" : formateurFCFA.format(m)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {monnaieARendre !== null && (
+                  <div
+                    className="flex items-center justify-between rounded-[10px] px-3.5 py-2.5"
+                    style={{
+                      background: Number(montantRecu) < total ? "#FEF3C7" : "var(--couleur-menthe)",
+                    }}
+                  >
+                    <span
+                      className="text-[15px] font-semibold"
+                      style={{ color: Number(montantRecu) < total ? "#7A4B05" : "var(--couleur-marque-claire)" }}
+                    >
+                      {Number(montantRecu) < total ? "Montant insuffisant" : "Monnaie à rendre"}
+                    </span>
+                    <span className="police-titre text-2xl font-bold" style={{ color: "var(--couleur-marque)" }}>
+                      {Number(montantRecu) < total
+                        ? `− ${formateurFCFA.format(total - Number(montantRecu))} F`
+                        : `${formateurFCFA.format(monnaieARendre)} F`}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Fidélité — optionnel, et uniquement en ligne */}
             {!enLigne ? (
-              <p className="text-xs" style={{ color: "#8A8676" }}>
+              <p className="text-[13px]" style={{ color: "var(--couleur-texte-3)" }}>
                 Fidélité indisponible hors ligne : les points ne peuvent pas être attribués pendant la coupure.
               </p>
             ) : !clientTrouve ? (
@@ -674,20 +885,16 @@ export default function PageCaisse() {
                 <div className="flex gap-2">
                   <input
                     type="tel"
-                    placeholder="Téléphone client (optionnel)"
+                    placeholder="Téléphone client fidélité (optionnel)"
+                    aria-label="Téléphone du client fidélité"
                     value={telephoneClient}
                     onChange={(e) => {
                       setTelephoneClient(e.target.value);
                       setRechercheClientFaite(false);
                     }}
-                    className="flex-1 h-9 px-2 rounded-md border text-sm"
-                    style={{ borderColor: "var(--couleur-bordure)" }}
+                    className="champ flex-1 min-w-0 h-11 text-sm"
                   />
-                  <button
-                    onClick={chercherClient}
-                    className="h-9 px-3 rounded-md text-sm border"
-                    style={{ borderColor: "var(--couleur-bordure)" }}
-                  >
+                  <button onClick={chercherClient} className="bouton bouton-secondaire h-11 px-3.5 text-sm">
                     Chercher
                   </button>
                 </div>
@@ -695,30 +902,32 @@ export default function PageCaisse() {
                   <div className="flex gap-2">
                     <input
                       placeholder="Nom du nouveau client"
+                      aria-label="Nom du nouveau client"
                       value={nomNouveauClient}
                       onChange={(e) => setNomNouveauClient(e.target.value)}
-                      className="flex-1 h-9 px-2 rounded-md border text-sm"
-                      style={{ borderColor: "var(--couleur-bordure)" }}
+                      className="champ flex-1 min-w-0 h-11 text-sm"
                     />
-                    <button
-                      onClick={creerClient}
-                      className="h-9 px-3 rounded-md text-sm text-white"
-                      style={{ background: "var(--couleur-marque)" }}
-                    >
+                    <button onClick={creerClient} className="bouton bouton-principal h-11 px-3.5 text-sm">
                       Créer
                     </button>
                   </div>
                 )}
               </div>
             ) : (
-              <div className="flex items-center justify-between text-sm rounded-md px-3 py-2" style={{ background: "#F0EEE7" }}>
-                <span>{clientTrouve.nom} — {clientTrouve.points_cumules} points</span>
+              <div
+                className="flex items-center justify-between text-sm rounded-[10px] px-3.5 py-2.5"
+                style={{ background: "var(--couleur-ligne)" }}
+              >
+                <span>
+                  <span className="font-semibold">{clientTrouve.nom}</span> · {clientTrouve.points_cumules} points
+                </span>
                 <button
                   onClick={() => {
                     setClientTrouve(null);
                     setTelephoneClient("");
                     setRechercheClientFaite(false);
                   }}
+                  className="font-semibold"
                   style={{ color: "var(--couleur-danger)" }}
                 >
                   Retirer
@@ -726,69 +935,23 @@ export default function PageCaisse() {
               </div>
             )}
 
-            <div className="flex gap-2">
-              {MODES_PAIEMENT.map((m) => (
-                <button
-                  key={m.valeur}
-                  onClick={() => setModePaiement(m.valeur)}
-                  className="flex-1 h-11 rounded-md text-sm font-medium border transition-colors"
-                  style={{
-                    borderColor: modePaiement === m.valeur ? "var(--couleur-marque)" : "var(--couleur-bordure)",
-                    background: modePaiement === m.valeur ? "var(--couleur-marque)" : "transparent",
-                    color: modePaiement === m.valeur ? "white" : "var(--couleur-texte)",
-                  }}
-                >
-                  {m.libelle}
-                </button>
-              ))}
-            </div>
-
-            {modePaiement === "especes" && (
-              <label className="flex items-center justify-between text-sm">
-                <span>Montant reçu</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={montantRecu}
-                  onChange={(e) => setMontantRecu(e.target.value)}
-                  className="w-28 h-9 px-2 rounded-md border text-right"
-                  style={{ borderColor: "var(--couleur-bordure)" }}
-                />
-              </label>
-            )}
-
-            {monnaieARendre !== null && (
-              <p className="text-sm" style={{ color: "var(--couleur-succes)" }}>
-                Monnaie à rendre : {formateurFCFA.format(monnaieARendre)} F
-              </p>
-            )}
-
-            <div className="flex items-baseline justify-between police-titre">
-              <span className="text-sm font-medium" style={{ color: "#6B6858" }}>Total</span>
-              <span className="text-3xl font-bold">{formateurFCFA.format(total)} F</span>
-            </div>
-
             {erreur && (
-              <p role="alert" className="text-sm rounded-md px-3 py-2" style={{ background: "#FBEAE8", color: "var(--couleur-danger)" }}>
+              <p role="alert" className="text-sm rounded-[10px] px-3.5 py-2.5" style={{ background: "#FDE3E1", color: "var(--couleur-danger)" }}>
                 {erreur}
               </p>
             )}
 
             {derniereVenteTotal !== null && !erreur && (
               <div
-                className="flex items-center justify-between gap-3 text-sm rounded-md px-3 py-2"
-                style={{ background: "#E9F5EE", color: "var(--couleur-succes)" }}
+                className="flex items-center justify-between gap-3 text-sm rounded-[10px] px-3.5 py-2.5"
+                style={{ background: "#E3F3EA", color: "var(--couleur-succes)" }}
               >
-                <span>
+                <span className="font-medium">
                   {dernierTicket?.horsLigne ? "Vente gardée sur le poste" : "Vente encaissée"} — {formateurFCFA.format(derniereVenteTotal)} F
                   {pointsGagnes !== null && pointsGagnes > 0 && ` · +${pointsGagnes} points fidélité`}
                 </span>
                 {dernierTicket && (
-                  <button
-                    onClick={() => window.print()}
-                    className="shrink-0 h-9 px-3 rounded-md text-sm font-medium text-white"
-                    style={{ background: "var(--couleur-marque)" }}
-                  >
+                  <button onClick={() => window.print()} className="bouton bouton-principal shrink-0 min-h-0 h-9 px-3 text-sm">
                     Réimprimer
                   </button>
                 )}
@@ -798,10 +961,9 @@ export default function PageCaisse() {
             <button
               onClick={encaisser}
               disabled={panier.length === 0 || enCours}
-              className="h-14 rounded-md text-white text-lg font-semibold disabled:opacity-40 transition-opacity"
-              style={{ background: "var(--couleur-accent)" }}
+              className="bouton bouton-accent h-16 rounded-[14px] police-titre text-[22px] font-bold"
             >
-              {enCours ? "Encaissement…" : "Encaisser"}
+              {enCours ? "Encaissement…" : panier.length > 0 ? `Encaisser ${formateurFCFA.format(total)} F` : "Encaisser"}
             </button>
           </div>
         </aside>

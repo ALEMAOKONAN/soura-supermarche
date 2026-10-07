@@ -22,7 +22,7 @@ const detail =
 
 export default function VersionApp({
   className = "",
-  couleur = "#8A8676",
+  couleur = "#66736B",
 }: {
   className?: string;
   couleur?: string;

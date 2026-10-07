@@ -1,4 +1,8 @@
 import type { Metadata } from "next";
+// Polices embarquées dans l'application (pas de Google Fonts) : elles
+// s'affichent aussi dans l'exe et hors connexion.
+import "@fontsource-variable/bricolage-grotesque";
+import "@fontsource-variable/figtree";
 import "./globals.css";
 
 export const metadata: Metadata = {

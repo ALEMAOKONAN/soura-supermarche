@@ -1,14 +1,17 @@
 "use client";
 
 import { useVersionApplicationWindows } from "@/lib/application-windows";
+import Icone from "@/components/Icone";
 
 // Visible uniquement dans l'application Windows (exe) : dans un navigateur,
 // le bouton d'actualisation du navigateur fait déjà ce travail.
 export default function BoutonRafraichir({
   className = "",
+  couleur = "var(--couleur-marque)",
   confirmation,
 }: {
   className?: string;
+  couleur?: string;
   // Message à confirmer avant d'actualiser (null = pas de confirmation)
   confirmation?: () => string | null;
 }) {
@@ -26,12 +29,10 @@ export default function BoutonRafraichir({
       type="button"
       onClick={actualiser}
       title="Actualiser la page (F5)"
-      className={`inline-flex items-center gap-1.5 ${className}`}
-      style={{ color: "var(--couleur-marque)" }}
+      className={`inline-flex items-center gap-2 ${className}`}
+      style={{ color: couleur }}
     >
-      <span aria-hidden className="text-base leading-none">
-        ↻
-      </span>
+      <Icone nom="actualiser" taille={18} />
       Actualiser
     </button>
   );

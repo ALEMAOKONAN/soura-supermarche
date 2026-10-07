@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import EnTetePage from "@/components/EnTetePage";
 import { creerClientSupabase } from "@/lib/supabase/client";
 import { chargerProfilConnecte } from "@/lib/profil";
 
@@ -187,69 +188,61 @@ export default function PageFournisseurs() {
   if (chargement) {
     return (
       <main className="min-h-screen flex items-center justify-center" style={{ background: "var(--couleur-fond)" }}>
-        <p style={{ color: "#8A8676" }}>Chargement…</p>
+        <p style={{ color: "var(--couleur-texte-3)" }}>Chargement…</p>
       </main>
     );
   }
 
   return (
-    <main>
-      <header
-        className="flex items-center h-16 px-8 border-b"
-        style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
-      >
-        <p className="police-titre font-semibold text-lg">Fournisseurs</p>
-      </header>
+    <main className="pb-10">
+      <EnTetePage titre="Fournisseurs" />
 
-      <div className="max-w-3xl mx-auto p-6 flex flex-col gap-10">
+      <div className="px-5 md:px-8 pt-5 max-w-5xl flex flex-col gap-5">
         {erreur && (
-          <p role="alert" className="text-sm rounded-md px-3 py-2" style={{ background: "#FBEAE8", color: "var(--couleur-danger)" }}>
+          <p role="alert" className="text-sm rounded-[10px] px-3.5 py-2.5" style={{ background: "#FDE3E1", color: "var(--couleur-danger)" }}>
             {erreur}
           </p>
         )}
         {message && !erreur && (
-          <p className="text-sm rounded-md px-3 py-2" style={{ background: "#E9F5EE", color: "var(--couleur-succes)" }}>
+          <p className="text-sm rounded-[10px] px-3.5 py-2.5" style={{ background: "#E3F3EA", color: "var(--couleur-succes)" }}>
             {message}
           </p>
         )}
 
         {/* Fournisseurs */}
-        <section>
-          <h2 className="police-titre font-semibold text-sm uppercase tracking-wide mb-3" style={{ color: "#6B6858" }}>
+        <section className="carte p-5 md:p-6">
+          <h2 className="titre-section mb-4">
             Fournisseurs ({fournisseurs.length})
           </h2>
           <ul className="flex flex-col mb-4">
             {fournisseurs.map((f) => (
               <li key={f.id} className="py-2 border-b text-sm flex justify-between" style={{ borderColor: "var(--couleur-bordure)" }}>
                 <span>{f.nom}</span>
-                <span style={{ color: "#8A8676" }}>{f.telephone}</span>
+                <span style={{ color: "var(--couleur-texte-3)" }}>{f.telephone}</span>
               </li>
             ))}
           </ul>
           <form onSubmit={creerFournisseur} className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1.5 flex-1 min-w-[160px]">
-              <span className="text-sm font-medium">Nom</span>
+              <span className="text-sm font-semibold">Nom</span>
               <input
                 required
                 value={nomFournisseur}
                 onChange={(e) => setNomFournisseur(e.target.value)}
-                className="h-10 px-3 rounded-md border bg-white text-sm outline-none focus:border-[var(--couleur-marque)]"
-                style={{ borderColor: "var(--couleur-bordure)" }}
+                className="champ"
               />
             </label>
             <label className="flex flex-col gap-1.5 w-40">
-              <span className="text-sm font-medium">Téléphone</span>
+              <span className="text-sm font-semibold">Téléphone</span>
               <input
                 value={telFournisseur}
                 onChange={(e) => setTelFournisseur(e.target.value)}
-                className="h-10 px-3 rounded-md border bg-white text-sm outline-none focus:border-[var(--couleur-marque)]"
-                style={{ borderColor: "var(--couleur-bordure)" }}
+                className="champ"
               />
             </label>
             <button
               type="submit"
-              className="h-10 px-5 rounded-md text-white text-sm font-medium"
-              style={{ background: "var(--couleur-marque)" }}
+              className="bouton bouton-principal h-[46px]"
             >
               Ajouter
             </button>
@@ -257,19 +250,18 @@ export default function PageFournisseurs() {
         </section>
 
         {/* Nouvelle commande */}
-        <section>
-          <h2 className="police-titre font-semibold text-sm uppercase tracking-wide mb-3" style={{ color: "#6B6858" }}>
+        <section className="carte p-5 md:p-6">
+          <h2 className="titre-section mb-4">
             Nouvelle commande
           </h2>
           <form onSubmit={creerCommande} className="flex flex-col gap-3">
             <label className="flex flex-col gap-1.5 max-w-xs">
-              <span className="text-sm font-medium">Fournisseur</span>
+              <span className="text-sm font-semibold">Fournisseur</span>
               <select
                 required
                 value={fournisseurChoisi}
                 onChange={(e) => setFournisseurChoisi(e.target.value)}
-                className="h-10 px-3 rounded-md border bg-white text-sm"
-                style={{ borderColor: "var(--couleur-bordure)" }}
+                className="champ"
               >
                 <option value="">Choisir…</option>
                 {fournisseurs.map((f) => (
@@ -281,12 +273,11 @@ export default function PageFournisseurs() {
             {lignesBrouillon.map((ligne, index) => (
               <div key={index} className="flex flex-wrap items-end gap-3">
                 <label className="flex flex-col gap-1.5 flex-1 min-w-[160px]">
-                  <span className="text-sm font-medium">Article</span>
+                  <span className="text-sm font-semibold">Article</span>
                   <select
                     value={ligne.produit_id}
                     onChange={(e) => mettreAJourLigneBrouillon(index, "produit_id", e.target.value)}
-                    className="h-10 px-3 rounded-md border bg-white text-sm"
-                    style={{ borderColor: "var(--couleur-bordure)" }}
+                    className="champ"
                   >
                     <option value="">Choisir…</option>
                     {produits.map((p) => (
@@ -295,25 +286,23 @@ export default function PageFournisseurs() {
                   </select>
                 </label>
                 <label className="flex flex-col gap-1.5 w-28">
-                  <span className="text-sm font-medium">Quantité</span>
+                  <span className="text-sm font-semibold">Quantité</span>
                   <input
                     type="number"
                     min={0}
                     value={ligne.quantite}
                     onChange={(e) => mettreAJourLigneBrouillon(index, "quantite", e.target.value)}
-                    className="h-10 px-3 rounded-md border bg-white text-sm"
-                    style={{ borderColor: "var(--couleur-bordure)" }}
+                    className="champ"
                   />
                 </label>
                 <label className="flex flex-col gap-1.5 w-32">
-                  <span className="text-sm font-medium">Prix unitaire</span>
+                  <span className="text-sm font-semibold">Prix unitaire</span>
                   <input
                     type="number"
                     min={0}
                     value={ligne.prix_unitaire}
                     onChange={(e) => mettreAJourLigneBrouillon(index, "prix_unitaire", e.target.value)}
-                    className="h-10 px-3 rounded-md border bg-white text-sm"
-                    style={{ borderColor: "var(--couleur-bordure)" }}
+                    className="champ"
                   />
                 </label>
               </div>
@@ -331,8 +320,7 @@ export default function PageFournisseurs() {
             <button
               type="submit"
               disabled={creationCommandeEnCours}
-              className="h-10 px-5 rounded-md text-white text-sm font-medium self-start disabled:opacity-60"
-              style={{ background: "var(--couleur-accent)" }}
+              className="bouton bouton-accent h-[46px] self-start"
             >
               {creationCommandeEnCours ? "Création…" : "Créer la commande"}
             </button>
@@ -340,19 +328,19 @@ export default function PageFournisseurs() {
         </section>
 
         {/* Commandes en cours */}
-        <section>
-          <h2 className="police-titre font-semibold text-sm uppercase tracking-wide mb-3" style={{ color: "#6B6858" }}>
+        <section className="carte p-5 md:p-6">
+          <h2 className="titre-section mb-4">
             Commandes
           </h2>
           <div className="flex flex-col gap-5">
             {commandes.map((c) => (
-              <div key={c.id} className="rounded-md border p-4" style={{ borderColor: "var(--couleur-bordure)" }}>
+              <div key={c.id} className="rounded-[10px] border p-4" style={{ borderColor: "var(--couleur-bordure)" }}>
                 <div className="flex items-center justify-between mb-3">
                   <p className="font-medium">{c.fournisseurs?.nom}</p>
                   <span
                     className="text-xs px-2 py-0.5 rounded-full"
                     style={{
-                      background: c.statut === "receptionnee" ? "#E9F5EE" : "#FFF4EC",
+                      background: c.statut === "receptionnee" ? "#E3F3EA" : "#FEF3C7",
                       color: c.statut === "receptionnee" ? "var(--couleur-succes)" : "var(--couleur-accent-sombre)",
                     }}
                   >
@@ -378,7 +366,7 @@ export default function PageFournisseurs() {
                               onChange={(e) =>
                                 setReceptions((a) => ({ ...a, [l.id]: { ...a[l.id], quantite: e.target.value, lot: a[l.id]?.lot ?? "", peremption: a[l.id]?.peremption ?? "" } }))
                               }
-                              className="w-16 h-8 px-2 rounded-md border text-sm"
+                              className="w-16 h-10 px-2 rounded-[10px] border text-sm"
                               style={{ borderColor: "var(--couleur-bordure)" }}
                             />
                             <input
@@ -388,7 +376,7 @@ export default function PageFournisseurs() {
                               onChange={(e) =>
                                 setReceptions((a) => ({ ...a, [l.id]: { ...a[l.id], lot: e.target.value, quantite: a[l.id]?.quantite ?? "", peremption: a[l.id]?.peremption ?? "" } }))
                               }
-                              className="w-24 h-8 px-2 rounded-md border text-sm"
+                              className="w-24 h-10 px-2 rounded-[10px] border text-sm"
                               style={{ borderColor: "var(--couleur-bordure)" }}
                             />
                             <input
@@ -397,12 +385,12 @@ export default function PageFournisseurs() {
                               onChange={(e) =>
                                 setReceptions((a) => ({ ...a, [l.id]: { ...a[l.id], peremption: e.target.value, quantite: a[l.id]?.quantite ?? "", lot: a[l.id]?.lot ?? "" } }))
                               }
-                              className="h-8 px-2 rounded-md border text-sm"
+                              className="h-10 px-2 rounded-[10px] border text-sm"
                               style={{ borderColor: "var(--couleur-bordure)" }}
                             />
                             <button
                               onClick={() => receptionnerLigne(l.id)}
-                              className="h-8 px-3 rounded-md text-xs font-medium border"
+                              className="h-10 px-3 rounded-[10px] text-sm font-semibold border"
                               style={{ borderColor: "var(--couleur-marque)", color: "var(--couleur-marque)" }}
                             >
                               Réceptionner
