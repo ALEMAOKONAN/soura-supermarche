@@ -5,12 +5,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { creerClientSupabase } from "@/lib/supabase/client";
 import Icone from "@/components/Icone";
 import Logo from "@/components/Logo";
+import { bipErreur, bipOk } from "@/lib/sons";
 import BoutonRafraichir from "@/components/BoutonRafraichir";
 import {
   ajouterAFile,
   chercherDansCatalogue,
   enregistrerCatalogue,
   enregistrerProfil,
+  lireCatalogue,
   estErreurReseau,
   lireFile,
   lireProfil,
@@ -54,12 +56,44 @@ type TicketRecu = {
 type InfosMagasin = { nomMagasin: string; adresse: string; nomCaissier: string };
 
 const MODES_PAIEMENT = [
-  { valeur: "especes", libelle: "Espèces" },
-  { valeur: "carte", libelle: "Carte" },
-  { valeur: "mobile_money", libelle: "Mobile Money" },
+  { valeur: "especes", libelle: "Espèces", touche: "F1" },
+  { valeur: "mobile_money", libelle: "Mobile Money", touche: "F2" },
+  { valeur: "carte", libelle: "Carte", touche: "F3" },
 ] as const;
 
+// Raccourcis rappelés sous la barre de scan (écrans avec clavier)
+const AIDE_RACCOURCIS: [string, string][] = [
+  ["Entrée", "ajouter"],
+  ["6*", "quantité"],
+  ["+ / −", "dernier article"],
+  ["F1 F2 F3", "paiement"],
+  ["F4", "montant reçu"],
+  ["F12", "encaisser"],
+  ["Échap", "annuler"],
+];
+
+// Un code-barres : uniquement des chiffres (au moins 4)
+const RE_CODE_BARRE = /^\d{4,}$/;
+// Quantité tapée avant le scan : « 6* » ou « 1,5* » (poids en kg)
+const RE_MULTIPLICATEUR = /^(\d{1,4}(?:[.,]\d{1,3})?)\*$/;
+
+function Touche({ children, claire = false }: { children: React.ReactNode; claire?: boolean }) {
+  return (
+    <kbd
+      className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-md text-[11px] font-bold font-sans"
+      style={{
+        background: claire ? "rgba(255,255,255,0.18)" : "#FFFFFF",
+        border: claire ? "1px solid rgba(255,255,255,0.35)" : "1px solid var(--couleur-bordure-forte)",
+        color: claire ? "#FFFFFF" : "var(--couleur-texte-2)",
+      }}
+    >
+      {children}
+    </kbd>
+  );
+}
+
 const formateurFCFA = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+const formateurQuantite = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 3 });
 
 // Montants que le client tend le plus souvent : le compte exact, puis les
 // montants ronds juste au-dessus du total (1 000, 5 000, 10 000…).
@@ -79,17 +113,32 @@ function montantsProposes(total: number): number[] {
 }
 
 // Articles en tuiles, faciles à toucher sur un écran tactile.
-function TuilesArticles({ produits, onChoisir }: { produits: Produit[]; onChoisir: (p: Produit) => void }) {
+function TuilesArticles({
+  produits,
+  onChoisir,
+  surligne,
+}: {
+  produits: Produit[];
+  onChoisir: (p: Produit) => void;
+  surligne?: string;
+}) {
   return (
     <ul className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
       {produits.map((p) => (
         <li key={p.id}>
           <button
             onClick={() => onChoisir(p)}
-            className="w-full h-full min-h-[120px] flex flex-col gap-2 p-3.5 rounded-[14px] border bg-white text-left transition-colors hover:border-[var(--couleur-marque)] hover:bg-[#F7FAF8]"
-            style={{ borderColor: "var(--couleur-bordure)" }}
+            className="relative w-full h-full min-h-[120px] flex flex-col gap-2 p-3.5 rounded-[14px] bg-white text-left transition-colors hover:border-[var(--couleur-marque)] hover:bg-[#F7FAF8]"
+            style={{
+              border: surligne === p.id ? "2px solid var(--couleur-marque)" : "1px solid var(--couleur-bordure)",
+            }}
           >
-            <span className="text-[15px] font-semibold leading-snug">{p.nom}</span>
+            {surligne === p.id && (
+              <span className="absolute top-2 right-2 hidden md:inline-flex">
+                <Touche>Entrée</Touche>
+              </span>
+            )}
+            <span className={`text-[15px] font-semibold leading-snug ${surligne === p.id ? "md:pr-14" : ""}`}>{p.nom}</span>
             {p.est_pese && (
               <span className="pastille pastille-neutre self-start text-xs">au poids</span>
             )}
@@ -112,6 +161,14 @@ export default function PageCaisse() {
   const [panier, setPanier] = useState<LignePanier[]>([]);
   // Derniers articles ajoutés (pour les reprendre d'un geste)
   const [recents, setRecents] = useState<Produit[]>([]);
+  // Quantité tapée avant le scan (« 6* »), appliquée au prochain article
+  const [multiplicateur, setMultiplicateur] = useState<number | null>(null);
+  // Message affiché quand un code scanné est inconnu
+  const [alerteScan, setAlerteScan] = useState<string | null>(null);
+  // Dernière ligne touchée : surlignée un instant, et visée par + / −
+  const [derniereLigne, setDerniereLigne] = useState<{ id: string; n: number } | null>(null);
+  const champScanRef = useRef<HTMLInputElement>(null);
+  const champMontantRef = useRef<HTMLInputElement>(null);
   // Texte tapé dans le champ quantité d'une ligne du ticket, tant qu'il
   // n'a pas été validé (permet d'effacer/retaper sans que la ligne saute).
   const [quantiteSaisie, setQuantiteSaisie] = useState<Record<string, string>>({});
@@ -312,19 +369,94 @@ export default function PageCaisse() {
     };
   }, [recherche, supabase]);
 
+  function eclairerLigne(produitId: string) {
+    setDerniereLigne((d) => ({ id: produitId, n: (d?.n ?? 0) + 1 }));
+    requestAnimationFrame(() =>
+      document.getElementById(`ligne-${produitId}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+    );
+  }
+
   function ajouterAuPanier(produit: Produit) {
+    const ajout = multiplicateur ?? 1;
     setPanier((actuel) => {
       const existant = actuel.find((l) => l.produit.id === produit.id);
       if (existant) {
         return actuel.map((l) =>
-          l.produit.id === produit.id ? { ...l, quantite: l.quantite + 1 } : l
+          l.produit.id === produit.id ? { ...l, quantite: Number((l.quantite + ajout).toFixed(3)) } : l
         );
       }
-      return [...actuel, { produit, quantite: 1 }];
+      return [...actuel, { produit, quantite: ajout }];
     });
     setRecents((actuels) => [produit, ...actuels.filter((p) => p.id !== produit.id)].slice(0, 12));
     setRecherche("");
     setResultats([]);
+    setMultiplicateur(null);
+    setAlerteScan(null);
+    eclairerLigne(produit.id);
+    bipOk();
+    champScanRef.current?.focus();
+  }
+
+  function signalerIntrouvable(saisie: string) {
+    setAlerteScan(
+      RE_CODE_BARRE.test(saisie)
+        ? `Code-barres inconnu : ${saisie}. Vérifiez l'article ou cherchez-le par son nom.`
+        : `Aucun article ne correspond à « ${saisie} ».`
+    );
+    setRecherche("");
+    setResultats([]);
+    bipErreur();
+    champScanRef.current?.focus();
+  }
+
+  // Touche Entrée dans la barre de scan (le lecteur de code-barres l'envoie
+  // tout seul après chaque code) : l'article est ajouté directement.
+  async function validerSaisie() {
+    const saisie = recherche.trim();
+    if (!saisie) return;
+
+    if (RE_CODE_BARRE.test(saisie)) {
+      const local = lireCatalogue().find((p) => p.code_barre === saisie);
+      if (local) return ajouterAuPanier(local);
+      if (navigator.onLine) {
+        const { data } = await supabase
+          .from("produits")
+          .select("id, nom, code_barre, unite, prix_vente, est_pese")
+          .eq("actif", true)
+          .eq("code_barre", saisie)
+          .maybeSingle();
+        if (data) return ajouterAuPanier(data);
+      }
+      return signalerIntrouvable(saisie);
+    }
+
+    const trouves = resultats.length > 0 ? resultats : chercherDansCatalogue(saisie);
+    if (trouves.length > 0) return ajouterAuPanier(trouves[0]);
+    signalerIntrouvable(saisie);
+  }
+
+  function changerRecherche(valeur: string) {
+    setAlerteScan(null);
+    const m = valeur.trim().match(RE_MULTIPLICATEUR);
+    if (m) {
+      const q = Number(m[1].replace(",", "."));
+      if (q > 0) {
+        setMultiplicateur(q);
+        setRecherche("");
+        return;
+      }
+    }
+    setRecherche(valeur);
+  }
+
+  // + / − sur le dernier article ajouté (ou le dernier du ticket)
+  function ajusterDerniereLigne(delta: number) {
+    const cible =
+      panier.find((l) => l.produit.id === derniereLigne?.id) ?? panier[panier.length - 1];
+    if (!cible) return;
+    const pas = cible.produit.est_pese ? 0.1 : 1;
+    modifierQuantite(cible.produit.id, Number((cible.quantite + delta * pas).toFixed(3)));
+    eclairerLigne(cible.produit.id);
   }
 
   function modifierQuantite(produitId: string, quantite: number) {
@@ -493,8 +625,66 @@ export default function PageCaisse() {
       setErreur(e instanceof Error ? e.message : "Erreur inattendue.");
     } finally {
       setEnCours(false);
+      champScanRef.current?.focus();
     }
   }
+
+  // --- Raccourcis clavier ----------------------------------------------------
+  // La fonction est relue à chaque appui (référence), pour toujours voir le
+  // ticket et le mode de paiement à jour.
+  const raccourcisRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  useEffect(() => {
+    raccourcisRef.current = (e: KeyboardEvent) => {
+      const cible = e.target as HTMLElement | null;
+      const dansChamp = !!cible && ["INPUT", "TEXTAREA", "SELECT"].includes(cible.tagName);
+      const dansScan = cible === champScanRef.current;
+
+      const mode = { F1: "especes", F2: "mobile_money", F3: "carte" } as const;
+      if (e.key in mode) {
+        e.preventDefault();
+        setModePaiement(mode[e.key as keyof typeof mode]);
+        return;
+      }
+      if (e.key === "F4") {
+        e.preventDefault();
+        setModePaiement("especes");
+        requestAnimationFrame(() => champMontantRef.current?.focus());
+        return;
+      }
+      if (e.key === "F12") {
+        e.preventDefault();
+        if (panier.length > 0 && !enCours) void encaisser();
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (multiplicateur !== null || alerteScan || recherche) {
+          setMultiplicateur(null);
+          setAlerteScan(null);
+          setRecherche("");
+        } else if (panier.length > 0 && window.confirm("Annuler le ticket en cours ? Tous les articles seront retirés.")) {
+          viderTicket();
+        }
+        champScanRef.current?.focus();
+        return;
+      }
+      // + / − : seulement quand la barre de scan est vide (sinon on tape du texte)
+      if ((e.key === "+" || e.key === "-") && (!dansChamp || (dansScan && recherche === ""))) {
+        e.preventDefault();
+        ajusterDerniereLigne(e.key === "+" ? 1 : -1);
+        return;
+      }
+      // Un caractère tapé (ou scanné) ailleurs que dans un champ part dans la barre de scan
+      if (!dansChamp && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        champScanRef.current?.focus();
+      }
+    };
+  });
+  useEffect(() => {
+    const ecouter = (e: KeyboardEvent) => raccourcisRef.current(e);
+    window.addEventListener("keydown", ecouter);
+    return () => window.removeEventListener("keydown", ecouter);
+  }, []);
 
   return (
     <>
@@ -634,21 +824,66 @@ export default function PageCaisse() {
               <Icone nom="codeBarre" taille={26} />
             </span>
             <span className="sr-only">Scanner ou rechercher un article</span>
+            {multiplicateur !== null && (
+              <button
+                type="button"
+                onClick={() => setMultiplicateur(null)}
+                title="Retirer la quantité"
+                className="shrink-0 inline-flex items-center gap-1.5 h-9 pl-3 pr-2 rounded-full text-[15px] font-bold text-white"
+                style={{ background: "var(--couleur-marque)" }}
+              >
+                × {formateurQuantite.format(multiplicateur)}
+                <Icone nom="fermer" taille={14} />
+              </button>
+            )}
             <input
+              ref={champScanRef}
               autoFocus
               value={recherche}
-              onChange={(e) => setRecherche(e.target.value)}
-              placeholder="Scannez un code-barres ou tapez le nom d'un article…"
+              onChange={(e) => changerRecherche(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void validerSaisie();
+                }
+              }}
+              placeholder={
+                multiplicateur !== null
+                  ? "Scannez l'article à ajouter en plusieurs exemplaires…"
+                  : "Scannez un code-barres ou tapez le nom d'un article…"
+              }
+              autoComplete="off"
+              spellCheck={false}
               className="champ-nu flex-1 min-w-0 bg-transparent text-lg md:text-xl outline-none"
             />
           </label>
+
+          {alerteScan && (
+            <p
+              role="alert"
+              className="-mt-2 flex items-center gap-2.5 rounded-xl px-4 py-3 text-[15px] font-semibold"
+              style={{ background: "#FDE3E1", color: "#9B1C14" }}
+            >
+              <Icone nom="fermer" taille={18} />
+              {alerteScan}
+            </p>
+          )}
+
+          <ul className="hidden md:flex flex-wrap items-center gap-x-4 gap-y-2 -mt-2 text-[13px]" style={{ color: "var(--couleur-texte-2)" }} aria-label="Raccourcis clavier">
+            {AIDE_RACCOURCIS.map(([touche, action]) => (
+              <li key={touche} className="inline-flex items-center gap-1.5">
+                <Touche>{touche}</Touche>
+                {action}
+              </li>
+            ))}
+          </ul>
 
           {resultats.length > 0 && (
             <div className="flex flex-col gap-3">
               <h2 className="text-sm font-semibold" style={{ color: "var(--couleur-texte-2)" }}>
                 {resultats.length} article{resultats.length > 1 ? "s" : ""} trouvé{resultats.length > 1 ? "s" : ""}
               </h2>
-              <TuilesArticles produits={resultats} onChoisir={ajouterAuPanier} />
+              <TuilesArticles produits={resultats} onChoisir={ajouterAuPanier} surligne={resultats[0]?.id} />
             </div>
           )}
 
@@ -710,8 +945,11 @@ export default function PageCaisse() {
             )}
             {panier.map((l) => (
               <div
-                key={l.produit.id}
-                className="flex flex-col gap-1.5 py-3 border-b"
+                key={derniereLigne?.id === l.produit.id ? `${l.produit.id}-${derniereLigne.n}` : l.produit.id}
+                id={`ligne-${l.produit.id}`}
+                className={`flex flex-col gap-1.5 py-3 -mx-3 px-3 rounded-lg border-b ${
+                  derniereLigne?.id === l.produit.id ? "flash-ajout" : ""
+                }`}
                 style={{ borderColor: "var(--couleur-ligne)" }}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -801,14 +1039,17 @@ export default function PageCaisse() {
                     key={m.valeur}
                     onClick={() => setModePaiement(m.valeur)}
                     aria-pressed={actif}
-                    className="h-12 rounded-[10px] text-[15px] font-semibold border-2 transition-colors"
+                    className="h-12 md:h-14 rounded-[10px] text-[15px] font-semibold border-2 transition-colors"
                     style={{
                       borderColor: actif ? "var(--couleur-marque)" : "var(--couleur-bordure)",
                       background: actif ? "var(--couleur-menthe)" : "#FFFFFF",
                       color: "var(--couleur-marque)",
                     }}
                   >
-                    {m.libelle}
+                    <span className="flex flex-col items-center leading-tight">
+                      {m.libelle}
+                      <span className="hidden md:block text-[11px] font-bold opacity-60">{m.touche}</span>
+                    </span>
                   </button>
                 );
               })}
@@ -818,16 +1059,24 @@ export default function PageCaisse() {
               <div className="flex flex-col gap-2">
                 <label className="flex items-center justify-between gap-3">
                   <span className="text-[13px] font-semibold" style={{ color: "var(--couleur-texte-2)" }}>
-                    Montant reçu
+                    Montant reçu <span className="hidden md:inline-flex align-middle ml-1"><Touche>F4</Touche></span>
                   </span>
                   <input
                     type="number"
                     min={0}
                     inputMode="numeric"
+                    ref={champMontantRef}
                     value={montantRecu}
                     onChange={(e) => setMontantRecu(e.target.value)}
+                    onKeyDown={(e) => {
+                      // Montant tapé puis Entrée : on encaisse directement
+                      if (e.key === "Enter" && panier.length > 0 && !enCours) {
+                        e.preventDefault();
+                        void encaisser();
+                      }
+                    }}
                     placeholder="0"
-                    className="champ w-36 h-11 text-right text-lg font-semibold"
+                    className="champ w-36 h-11 text-right text-lg font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </label>
                 {total > 0 && (
@@ -964,6 +1213,9 @@ export default function PageCaisse() {
               className="bouton bouton-accent h-16 rounded-[14px] police-titre text-[22px] font-bold"
             >
               {enCours ? "Encaissement…" : panier.length > 0 ? `Encaisser ${formateurFCFA.format(total)} F` : "Encaisser"}
+              <span className="hidden md:inline-flex ml-1">
+                <Touche claire>F12</Touche>
+              </span>
             </button>
           </div>
         </aside>

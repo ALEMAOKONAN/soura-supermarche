@@ -142,3 +142,10 @@ h1, h2, h3, h4, .police-titre {
 
 /* Champ intégré dans un cadre qui montre déjà le focus (barre de scan, recherche) */
 .champ-nu:focus-visible { outline: none; }
+
+/* Caisse : la ligne qui vient d'être ajoutée s'allume en vert un instant */
+@keyframes flash-ajout {
+  from { background-color: #BFE6CF; }
+  to { background-color: transparent; }
+}
+.flash-ajout { animation: flash-ajout 1.2s ease-out; }
