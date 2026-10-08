@@ -47,6 +47,8 @@ type TicketRecu = {
   lignes: { nom: string; quantite: number; prixUnitaire: number }[];
   total: number;
   modePaiement: string;
+  operateur: string | null;
+  referencePaiement: string | null;
   montantRecu: number | null;
   monnaie: number | null;
   client: { nom: string; pointsGagnes: number; soldePoints: number } | null;
@@ -60,6 +62,17 @@ const MODES_PAIEMENT = [
   { valeur: "mobile_money", libelle: "Mobile Money", touche: "F2" },
   { valeur: "carte", libelle: "Carte", touche: "F3" },
 ] as const;
+
+// Opérateurs Mobile Money de Côte d'Ivoire. La pastille de couleur aide à
+// reconnaître l'opérateur d'un coup d'œil.
+const OPERATEURS_MOBILE = [
+  { valeur: "orange_money", libelle: "Orange Money", couleur: "#FF7900" },
+  { valeur: "mtn_momo", libelle: "MTN MoMo", couleur: "#FFCB05" },
+  { valeur: "moov_money", libelle: "Moov Money", couleur: "#0A5EB0" },
+  { valeur: "wave", libelle: "Wave", couleur: "#1DC8F2" },
+] as const;
+type OperateurMobile = (typeof OPERATEURS_MOBILE)[number]["valeur"];
+const libelleOperateur = (v?: string | null) => OPERATEURS_MOBILE.find((o) => o.valeur === v)?.libelle ?? null;
 
 // Raccourcis rappelés sous la barre de scan (écrans avec clavier)
 const AIDE_RACCOURCIS: [string, string][] = [
@@ -168,6 +181,9 @@ export default function PageCaisse() {
   // Dernière ligne touchée : surlignée un instant, et visée par + / −
   const [derniereLigne, setDerniereLigne] = useState<{ id: string; n: number } | null>(null);
   const [fideliteOuverte, setFideliteOuverte] = useState(false);
+  // Mobile Money : opérateur choisi et référence de la transaction
+  const [operateur, setOperateur] = useState<OperateurMobile | null>(null);
+  const [referencePaiement, setReferencePaiement] = useState("");
   const champScanRef = useRef<HTMLInputElement>(null);
   const champMontantRef = useRef<HTMLInputElement>(null);
   // Texte tapé dans le champ quantité d'une ligne du ticket, tant qu'il
@@ -298,6 +314,10 @@ export default function PageCaisse() {
           p_mode_paiement: vente.mode_paiement,
           p_lignes: vente.lignes,
           p_date_vente: vente.date,
+          // Envoyés seulement s'ils existent : les ventes gardées avant la mise
+          // à jour restent compatibles.
+          ...(vente.operateur_mobile ? { p_operateur_mobile: vente.operateur_mobile } : {}),
+          ...(vente.reference_paiement ? { p_reference_paiement: vente.reference_paiement } : {}),
         });
         if (!error) {
           retirerDeFile(vente.id);
@@ -515,6 +535,11 @@ export default function PageCaisse() {
 
   async function encaisser() {
     if (panier.length === 0) return;
+    if (modePaiement === "mobile_money" && !operateur) {
+      setErreur("Choisissez l'opérateur Mobile Money : Orange Money, MTN MoMo, Moov Money ou Wave.");
+      bipErreur();
+      return;
+    }
     setErreur(null);
     setEnCours(true);
     setPointsGagnes(null);
@@ -538,6 +563,11 @@ export default function PageCaisse() {
       }));
 
       let horsLigne = !navigator.onLine;
+      const reference = referencePaiement.trim();
+      const paiementMobile =
+        modePaiement === "mobile_money" && operateur
+          ? { p_operateur_mobile: operateur, ...(reference ? { p_reference_paiement: reference } : {}) }
+          : {};
 
       if (!horsLigne) {
         // En ligne : vente atomique avec contrôle du stock, comme avant.
@@ -546,6 +576,7 @@ export default function PageCaisse() {
           p_mode_paiement: modePaiement,
           p_lignes: lignes,
           p_vente_id: venteId,
+          ...paiementMobile,
         });
         if (erreurVente) {
           if (estErreurReseau(erreurVente)) {
@@ -565,6 +596,9 @@ export default function PageCaisse() {
           lignes,
           date: new Date().toISOString(),
           total,
+          ...(modePaiement === "mobile_money" && operateur
+            ? { operateur_mobile: operateur, ...(reference ? { reference_paiement: reference } : {}) }
+            : {}),
         });
         setFileAttente(lireFile());
         setEnLigne(false);
@@ -610,6 +644,8 @@ export default function PageCaisse() {
         })),
         total,
         modePaiement: MODES_PAIEMENT.find((m) => m.valeur === modePaiement)?.libelle ?? modePaiement,
+        operateur: modePaiement === "mobile_money" ? libelleOperateur(operateur) : null,
+        referencePaiement: modePaiement === "mobile_money" && reference ? reference : null,
         montantRecu: recu,
         monnaie: recu !== null ? Math.max(0, recu - total) : null,
         client: clientSurTicket,
@@ -619,6 +655,8 @@ export default function PageCaisse() {
       setDerniereVenteTotal(total);
       setPanier([]);
       setMontantRecu("");
+      setOperateur(null);
+      setReferencePaiement("");
       setClientTrouve(null);
       setTelephoneClient("");
       setRechercheClientFaite(false);
@@ -1130,6 +1168,58 @@ export default function PageCaisse() {
               </div>
             )}
 
+            {modePaiement === "mobile_money" && (
+              <div className="flex flex-col gap-2" role="group" aria-label="Opérateur Mobile Money">
+                <span className="text-[13px] font-semibold" style={{ color: "var(--couleur-texte-2)" }}>
+                  Opérateur
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  {OPERATEURS_MOBILE.map((o) => {
+                    const actif = operateur === o.valeur;
+                    return (
+                      <button
+                        key={o.valeur}
+                        type="button"
+                        onClick={() => {
+                          setOperateur(o.valeur);
+                          setErreur(null);
+                        }}
+                        aria-pressed={actif}
+                        className="h-11 [@media(max-height:820px)]:h-10 px-3 rounded-[10px] text-[15px] font-semibold border-2 flex items-center gap-2.5 transition-colors"
+                        style={{
+                          borderColor: actif ? "var(--couleur-marque)" : "var(--couleur-bordure)",
+                          background: actif ? "var(--couleur-menthe)" : "#FFFFFF",
+                          color: "var(--couleur-texte)",
+                        }}
+                      >
+                        <span
+                          aria-hidden
+                          className="w-3.5 h-3.5 rounded-full shrink-0"
+                          style={{ background: o.couleur, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.15)" }}
+                        />
+                        {o.libelle}
+                      </button>
+                    );
+                  })}
+                </div>
+                <input
+                  value={referencePaiement}
+                  onChange={(e) => setReferencePaiement(e.target.value.slice(0, 60))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && panier.length > 0 && !enCours) {
+                      e.preventDefault();
+                      void encaisser();
+                    }
+                  }}
+                  placeholder="Référence de la transaction (facultatif)"
+                  aria-label="Référence de la transaction Mobile Money"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="champ h-11 [@media(max-height:820px)]:h-10 text-sm"
+                />
+              </div>
+            )}
+
             {/* Fidélité — optionnel, et uniquement en ligne */}
             {!enLigne ? (
               <p className="text-[13px]" style={{ color: "var(--couleur-texte-3)" }}>
@@ -1308,8 +1398,14 @@ export default function PageCaisse() {
         </div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <span>Paiement</span>
-          <span>{dernierTicket.modePaiement}</span>
+          <span>{dernierTicket.operateur ? `${dernierTicket.modePaiement} (${dernierTicket.operateur})` : dernierTicket.modePaiement}</span>
         </div>
+        {dernierTicket.referencePaiement && (
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "8px" }}>
+            <span>Réf.</span>
+            <span style={{ wordBreak: "break-all", textAlign: "right" }}>{dernierTicket.referencePaiement}</span>
+          </div>
+        )}
         {dernierTicket.montantRecu !== null && (
           <>
             <div style={{ display: "flex", justifyContent: "space-between" }}>

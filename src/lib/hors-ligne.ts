@@ -31,6 +31,8 @@ export type VenteEnAttente = {
   lignes: { produit_id: string; quantite: number; prix_unitaire: number }[];
   date: string; // date réelle de la vente (ISO)
   total: number;
+  operateur_mobile?: string; // Mobile Money : orange_money, mtn_momo, moov_money, wave
+  reference_paiement?: string; // référence de la transaction donnée par l'opérateur
   derniereErreur?: string; // erreur refusée par la base (hors coupure réseau)
 };
 
