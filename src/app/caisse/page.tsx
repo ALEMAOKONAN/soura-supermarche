@@ -167,6 +167,7 @@ export default function PageCaisse() {
   const [alerteScan, setAlerteScan] = useState<string | null>(null);
   // Dernière ligne touchée : surlignée un instant, et visée par + / −
   const [derniereLigne, setDerniereLigne] = useState<{ id: string; n: number } | null>(null);
+  const [fideliteOuverte, setFideliteOuverte] = useState(false);
   const champScanRef = useRef<HTMLInputElement>(null);
   const champMontantRef = useRef<HTMLInputElement>(null);
   // Texte tapé dans le champ quantité d'une ligne du ticket, tant qu'il
@@ -621,6 +622,7 @@ export default function PageCaisse() {
       setClientTrouve(null);
       setTelephoneClient("");
       setRechercheClientFaite(false);
+      setFideliteOuverte(false);
     } catch (e) {
       setErreur(e instanceof Error ? e.message : "Erreur inattendue.");
     } finally {
@@ -648,7 +650,9 @@ export default function PageCaisse() {
       if (e.key === "F4") {
         e.preventDefault();
         setModePaiement("especes");
-        requestAnimationFrame(() => champMontantRef.current?.focus());
+        // Champ déjà affiché : curseur placé tout de suite (on peut taper aussitôt)
+        if (champMontantRef.current) champMontantRef.current.focus();
+        else requestAnimationFrame(() => champMontantRef.current?.focus());
         return;
       }
       if (e.key === "F12") {
@@ -697,7 +701,7 @@ export default function PageCaisse() {
       }
     `}</style>
 
-    <main className="min-h-screen flex flex-col print:hidden" style={{ background: "var(--couleur-fond)" }}>
+    <main className="min-h-dvh pb-24 md:pb-0 md:h-dvh md:overflow-hidden flex flex-col print:hidden" style={{ background: "var(--couleur-fond)" }}>
       {/* En-tête */}
       <header
         className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 md:px-6 py-3"
@@ -813,9 +817,9 @@ export default function PageCaisse() {
         </div>
       )}
 
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_380px] lg:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="flex-1 md:min-h-0 grid grid-cols-1 md:grid-rows-[minmax(0,1fr)] md:grid-cols-[minmax(0,1fr)_380px] lg:grid-cols-[minmax(0,1fr)_420px]">
         {/* Recherche / scan produit */}
-        <section className="p-4 md:p-6 flex flex-col gap-5 min-w-0">
+        <section className="p-4 md:p-6 flex flex-col gap-5 min-w-0 md:min-h-0 md:overflow-y-auto">
           <label
             className="flex items-center gap-3.5 h-16 px-5 rounded-[14px] border-2 bg-white focus-within:shadow-[0_0_0_4px_var(--couleur-menthe)]"
             style={{ borderColor: "var(--couleur-marque)" }}
@@ -916,10 +920,10 @@ export default function PageCaisse() {
 
         {/* Ticket en cours */}
         <aside
-          className="border-t md:border-t-0 md:border-l flex flex-col min-w-0"
+          className="border-t md:border-t-0 md:border-l flex flex-col min-w-0 md:min-h-0 md:overflow-hidden"
           style={{ borderColor: "var(--couleur-bordure)", background: "var(--couleur-surface)" }}
         >
-          <div className="flex items-center justify-between px-5 md:px-6 py-4 border-b" style={{ borderColor: "var(--couleur-bordure)" }}>
+          <div className="shrink-0 flex items-center justify-between px-5 md:px-6 py-4 [@media(max-height:820px)]:py-2.5 border-b" style={{ borderColor: "var(--couleur-bordure)" }}>
             <div>
               <h2 className="police-titre text-xl font-bold">Ticket en cours</h2>
               <p className="text-[13px]" style={{ color: "var(--couleur-texte-2)" }}>
@@ -937,9 +941,9 @@ export default function PageCaisse() {
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-5 md:px-6 py-1 flex flex-col">
+          <div className="flex-1 md:basis-0 md:min-h-[110px] md:overflow-y-auto px-5 md:px-6 py-1 flex flex-col">
             {panier.length === 0 && (
-              <p className="py-12 text-center text-[15px]" style={{ color: "var(--couleur-texte-2)" }}>
+              <p className="py-12 [@media(max-height:820px)]:py-6 text-center text-[15px]" style={{ color: "var(--couleur-texte-2)" }}>
                 Le ticket est vide.
               </p>
             )}
@@ -1017,16 +1021,18 @@ export default function PageCaisse() {
             ))}
           </div>
 
-          {/* Paiement — toujours visible, jamais à faire défiler pour trouver "encaisser" */}
+          {/* Paiement — toujours visible : le bouton Encaisser reste en bas de l'écran,
+              seule la liste des articles défile quand le ticket est long. */}
           <div
-            className="px-5 md:px-6 pt-4 pb-5 border-t flex flex-col gap-3.5"
+            className="shrink-0 md:shrink md:min-h-0 flex flex-col border-t"
             style={{ borderColor: "var(--couleur-bordure)", background: "#FAFBF9" }}
           >
+          <div className="md:min-h-0 md:overflow-y-auto px-5 md:px-6 pt-4 pb-3 [@media(max-height:820px)]:pt-2.5 [@media(max-height:820px)]:pb-2 flex flex-col gap-3.5 [@media(max-height:820px)]:gap-2.5">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[15px] font-semibold" style={{ color: "var(--couleur-texte-2)" }}>
                 Total à payer
               </span>
-              <span className="police-titre text-[40px] leading-none font-bold tracking-tight" style={{ color: "var(--couleur-marque)" }}>
+              <span className="police-titre text-[40px] [@media(max-height:820px)]:text-[32px] leading-none font-bold tracking-tight" style={{ color: "var(--couleur-marque)" }}>
                 {formateurFCFA.format(total)} F
               </span>
             </div>
@@ -1039,7 +1045,7 @@ export default function PageCaisse() {
                     key={m.valeur}
                     onClick={() => setModePaiement(m.valeur)}
                     aria-pressed={actif}
-                    className="h-12 md:h-14 rounded-[10px] text-[15px] font-semibold border-2 transition-colors"
+                    className="h-12 md:h-14 [@media(max-height:820px)]:md:h-11 rounded-[10px] text-[15px] font-semibold border-2 transition-colors"
                     style={{
                       borderColor: actif ? "var(--couleur-marque)" : "var(--couleur-bordure)",
                       background: actif ? "var(--couleur-menthe)" : "#FFFFFF",
@@ -1048,7 +1054,7 @@ export default function PageCaisse() {
                   >
                     <span className="flex flex-col items-center leading-tight">
                       {m.libelle}
-                      <span className="hidden md:block text-[11px] font-bold opacity-60">{m.touche}</span>
+                      <span className="hidden md:block [@media(max-height:820px)]:md:hidden text-[11px] font-bold opacity-60">{m.touche}</span>
                     </span>
                   </button>
                 );
@@ -1076,7 +1082,7 @@ export default function PageCaisse() {
                       }
                     }}
                     placeholder="0"
-                    className="champ w-36 h-11 text-right text-lg font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    className="champ w-36 h-11 [@media(max-height:820px)]:h-10 text-right text-lg font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </label>
                 {total > 0 && (
@@ -1088,7 +1094,7 @@ export default function PageCaisse() {
                           key={m}
                           onClick={() => setMontantRecu(String(m))}
                           aria-pressed={actif}
-                          className="h-11 rounded-[10px] text-sm font-semibold border transition-colors"
+                          className="h-11 [@media(max-height:820px)]:h-10 rounded-[10px] text-sm font-semibold border transition-colors"
                           style={{
                             borderColor: actif ? "var(--couleur-marque)" : "var(--couleur-bordure)",
                             background: actif ? "var(--couleur-marque)" : "#FFFFFF",
@@ -1103,7 +1109,7 @@ export default function PageCaisse() {
                 )}
                 {monnaieARendre !== null && (
                   <div
-                    className="flex items-center justify-between rounded-[10px] px-3.5 py-2.5"
+                    className="flex items-center justify-between rounded-[10px] px-3.5 py-2.5 [@media(max-height:820px)]:py-1.5"
                     style={{
                       background: Number(montantRecu) < total ? "#FEF3C7" : "var(--couleur-menthe)",
                     }}
@@ -1129,6 +1135,16 @@ export default function PageCaisse() {
               <p className="text-[13px]" style={{ color: "var(--couleur-texte-3)" }}>
                 Fidélité indisponible hors ligne : les points ne peuvent pas être attribués pendant la coupure.
               </p>
+            ) : !clientTrouve && !fideliteOuverte ? (
+              <button
+                type="button"
+                onClick={() => setFideliteOuverte(true)}
+                className="self-start inline-flex items-center gap-1.5 h-9 text-sm font-semibold"
+                style={{ color: "var(--couleur-marque)" }}
+              >
+                <Icone nom="plus" taille={16} />
+                Client fidélité
+              </button>
             ) : !clientTrouve ? (
               <div className="flex flex-col gap-2">
                 <div className="flex gap-2">
@@ -1141,10 +1157,24 @@ export default function PageCaisse() {
                       setTelephoneClient(e.target.value);
                       setRechercheClientFaite(false);
                     }}
+                    autoFocus
                     className="champ flex-1 min-w-0 h-11 text-sm"
                   />
                   <button onClick={chercherClient} className="bouton bouton-secondaire h-11 px-3.5 text-sm">
                     Chercher
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Fermer la fidélité"
+                    onClick={() => {
+                      setFideliteOuverte(false);
+                      setTelephoneClient("");
+                      setRechercheClientFaite(false);
+                    }}
+                    className="w-9 h-11 flex items-center justify-center shrink-0"
+                    style={{ color: "var(--couleur-texte-2)" }}
+                  >
+                    <Icone nom="fermer" taille={16} />
                   </button>
                 </div>
                 {rechercheClientFaite && !clientTrouve && (
@@ -1207,16 +1237,23 @@ export default function PageCaisse() {
               </div>
             )}
 
+          </div>
+
+          <div
+            className="shrink-0 fixed md:sticky bottom-0 inset-x-0 z-20 md:z-auto border-t md:border-t-0 px-5 md:px-6 pt-2 pb-4 [@media(max-height:820px)]:pb-3"
+            style={{ background: "#FAFBF9", borderColor: "var(--couleur-bordure)" }}
+          >
             <button
               onClick={encaisser}
               disabled={panier.length === 0 || enCours}
-              className="bouton bouton-accent h-16 rounded-[14px] police-titre text-[22px] font-bold"
+              className="bouton bouton-accent w-full h-16 [@media(max-height:820px)]:h-14 rounded-[14px] police-titre text-[22px] [@media(max-height:820px)]:text-xl font-bold"
             >
               {enCours ? "Encaissement…" : panier.length > 0 ? `Encaisser ${formateurFCFA.format(total)} F` : "Encaisser"}
               <span className="hidden md:inline-flex ml-1">
                 <Touche claire>F12</Touche>
               </span>
             </button>
+          </div>
           </div>
         </aside>
       </div>
