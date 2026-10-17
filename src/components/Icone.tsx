@@ -64,6 +64,29 @@ const TRACES = {
       <path d="M5 12h11" />
     </>
   ),
+  comptabilite: (
+    <>
+      <rect x="5" y="3" width="14" height="18" rx="2" />
+      <path d="M8 7h8" />
+      <path d="M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M8 18h2M12 18h2" />
+      <path d="M16 15v3" />
+    </>
+  ),
+  telecharger: (
+    <>
+      <path d="M12 4v11" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 20h14" />
+    </>
+  ),
+  corbeille: (
+    <>
+      <path d="M4 7h16" />
+      <path d="M10 11v6M14 11v6" />
+      <path d="M6 7l1 13h10l1-13" />
+      <path d="M9 7V4h6v3" />
+    </>
+  ),
   plus: <path d="M12 5v14M5 12h14" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   fermer: <path d="M6 6l12 12M18 6 6 18" />,

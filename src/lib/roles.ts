@@ -30,6 +30,7 @@ export const PAGES_GESTION: { href: string; label: string; roles: Role[] }[] = [
   { href: "/gerant", label: "Tableau de bord", roles: ["admin_org", "gerant_magasin"] },
   { href: "/gerant/produits", label: "Produits et stock", roles: ["admin_org", "gerant_magasin", "gestionnaire_stock"] },
   { href: "/gerant/fournisseurs", label: "Fournisseurs", roles: ["admin_org", "gerant_magasin", "gestionnaire_stock"] },
+  { href: "/gerant/comptabilite", label: "Comptabilité", roles: ["admin_org", "gerant_magasin"] },
   { href: "/gerant/employes", label: "Employés", roles: ["admin_org"] },
 ];
 

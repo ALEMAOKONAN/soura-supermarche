@@ -14,6 +14,7 @@ const ICONES: Record<string, NomIcone> = {
   "/gerant": "tableau",
   "/gerant/produits": "produits",
   "/gerant/fournisseurs": "fournisseurs",
+  "/gerant/comptabilite": "comptabilite",
   "/gerant/employes": "employes",
 };
 
